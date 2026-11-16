@@ -219,6 +219,7 @@ export function apply(ctx, rawConfig = {}) {
             limit: config.limit,
             max_tokens: 1800,
           })
+          logEvent('recall', { source: 'focus', hits: Array.isArray(records) ? records.length : 0, q: text.slice(0, 90) })
           if (Array.isArray(records) && records.length) {
             scheduleFocus(records)
             focusSource = 'recall'
@@ -371,6 +372,7 @@ export function apply(ctx, rawConfig = {}) {
         const facet = String(args.facet ?? '').trim()
         if (facet && !facet.includes('=')) throw new Error('um_mem_recall: facet must look like um.key=value')
         const records = await runWithRequest(config, 'recall', plan, facet ? ['--facet', facet] : [])
+        logEvent('recall', { source: 'tool', hits: Array.isArray(records) ? records.length : 0, q: String(plan.query || '').slice(0, 90) })
         const compact = compactRecords(records)
         let text = renderRecall(records, { limit })
         // Links were stored but nothing read them, so a connected record stayed
