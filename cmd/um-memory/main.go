@@ -979,6 +979,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			payload["stable_id"] = resolved["stable_id"]
 			payload["revisions"] = resolved["revisions"]
 		}
+		if withdrawn, werr := selected.WithdrawnIDs(ctx); werr == nil {
+			payload["withdrawn"] = withdrawn[record.BlockID]
+		}
 		return encoder.Encode(payload)
 	case "stable-id":
 		if strings.TrimSpace(*recordID) == "" {

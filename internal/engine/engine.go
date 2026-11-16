@@ -426,6 +426,9 @@ func (engine *Engine) Recall(ctx context.Context, plan memory.RecallPlan) (recor
 	if len(metaFacets) > 0 {
 		records = filterMetadataFacets(records, metaFacets)
 	}
+	if withdrawn, werr := engine.WithdrawnIDs(ctx); werr == nil {
+		records = markWithdrawn(records, withdrawn)
+	}
 	return records, nil
 }
 
