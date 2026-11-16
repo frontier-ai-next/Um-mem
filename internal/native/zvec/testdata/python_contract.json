@@ -1,0 +1,46 @@
+{
+  "record": {
+    "block_id": "mem_bound",
+    "workspace_id": "alpha",
+    "content": "Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭 final",
+    "block_membership": {
+      "primary_block_id": "leaf",
+      "catalog_revision_id": "cat:v1",
+      "backend_partition_id": "static:a77976ebbdb8e60f46dd044b02a8db7b1a28a16612d3d91f1d429a908b67a0f4",
+      "secondary_block_ids": [
+        "other"
+      ],
+      "record_id": "mem_bound",
+      "record_revision_id": "rev_1",
+      "workspace_id": "alpha",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "valid_to": "",
+      "membership_revision_id": "membership_a2c78fa8d35e15f1bf807bbd4a713e860caf99b41a17376c92f536f43fe04787"
+    }
+  },
+  "partition": {
+    "backend_id": "zvec",
+    "workspace_id": "alpha",
+    "primary_block_id": "leaf",
+    "catalog_revision_id": "cat:v1",
+    "partition_id": "zvec:collection:40d82507ddbc9c8090128fa288e72373bb17028719fc9c026570053739205e62",
+    "isolation_class": "physical",
+    "partition_mode": "native_collection"
+  },
+  "chunks": [
+    {
+      "id": "c9742e656a3faeb17bb8985dc602eb64675c7356fd4637c63556a2358b16d605",
+      "start": 0,
+      "end": 480,
+      "content": "Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ång"
+    },
+    {
+      "id": "04fd0851639f5300e8e692c19241de498d799060a55c3cb4acab4b8fd8759a4f",
+      "start": 360,
+      "end": 546,
+      "content": "Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭Ångström🧭 final"
+    }
+  ],
+  "source_sha256": "b4838b09b41c79a42f8fe4ea4545d469cf035b622434783cc66e98f59c2ab761",
+  "projection_lock_key": "1ba2723c3ab7110a920ea3559759b1be65b3693f280288f04ded305d00a76878"
+}

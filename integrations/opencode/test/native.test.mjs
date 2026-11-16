@@ -1,0 +1,119 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { chmod, copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import plugin from "../dist/index.js";
+
+test("native Mnemosyne: pages, hypothesis, correction, focus switch, retraction and cross-session recall", {
+  skip: !process.env.UM_MEM_SMOKE_GO && !process.env.UM_MEM_SMOKE_GO_BIN_DIR,
+  timeout: 180_000,
+}, async () => {
+  const root = await mkdtemp(join(tmpdir(), "um-mem-opencode-"));
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  const source = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const binary = (name) => join(root, name + suffix);
+  const env = { UM_MEM_REPO_ROOT: root, UM_MEM_WORKSPACE: "smoke",
+    UM_MEM_PROFILE: "default", UM_MEM_BACKEND: "mnemosyne",
+    UM_MEM_LOCAL_SERVICE_IDLE_SECONDS: "1" };
+  const tools = new Map();
+  const hooks = new Map();
+  let cleanup;
+  try {
+    for (const name of ["um-memory", "um-memory-mcp", "um-memory-service"]) {
+      if (process.env.UM_MEM_SMOKE_GO_BIN_DIR) {
+        await copyFile(join(process.env.UM_MEM_SMOKE_GO_BIN_DIR, name + suffix), binary(name));
+        await chmod(binary(name), 0o755);
+      } else {
+        execFileSync(process.env.UM_MEM_SMOKE_GO,
+          ["build", "-tags", "purego", "-o", binary(name), `./cmd/${name}`],
+          { cwd: source, env: { ...process.env, CGO_ENABLED: "0" },
+            stdio: "pipe", timeout: 120_000 });
+      }
+    }
+    cleanup = await plugin.setup({
+      options: { command: [binary("um-memory-mcp"), "--repo-root", root,
+        "--workspace", "smoke", "--profile", "default", "--backend", "mnemosyne"], env },
+      location: { directory: root },
+      tool: { transform: async (apply) => apply({ namespace() {}, add: (tool) => tools.set(tool.name, tool) }) },
+      session: { hook: async (name, hook) => hooks.set(name, hook) },
+    });
+    let sequence = 0;
+    const call = async (name, input, sessionID = "native-a") => {
+      const result = await tools.get(name).execute(input, { sessionID, messageID: "native-message", id: `call-${++sequence}`, signal: new AbortController().signal });
+      const body = JSON.parse(result.content);
+      assert.equal(body.ok, true, JSON.stringify(body));
+      return body;
+    };
+    const health = await call("health", {});
+    assert.equal(health.native_ok, true);
+    assert.equal(health.effective_mode, "selected_native");
+    const map = await call("block_map", {});
+    const leaf = await call("create_block", { name: "Constraint", synopsis: "Verified smoke constraint", parent_id: map.roots[0].block_id, reason: "isolated smoke", scope: "project" });
+    const secondLeaf = await call("create_block", { name: "Second topic", synopsis: "Independent second constraint", parent_id: map.roots[0].block_id, reason: "separate topic", scope: "project" });
+    const distractor = await call("create_block", { name: "Unrelated topic", synopsis: "Unrelated evidence", parent_id: map.roots[0].block_id, reason: "separate topic" });
+    let cursor = "";
+    const seen = [];
+    do {
+      const page = await call("expand_block", { block_id: map.roots[0].block_id, limit: 1, cursor });
+      assert.equal(page.children.length, 1);
+      assert.equal(page.child_count, 3);
+      assert.equal(page.root.diagnostics_status, "not_probed");
+      seen.push(page.children[0].block_id);
+      cursor = page.next_cursor;
+    } while (cursor);
+    assert.deepEqual(new Set(seen), new Set([leaf.block_id, secondLeaf.block_id, distractor.block_id]));
+    const saved = await call("remember", { content: "The opaque constraint is A7K.", title: "Opaque constraint", kind: "user_preference", evidence_kind: "user_statement", requested_block_id: leaf.block_id });
+    const requestPath = join(root, "workspace-note.json");
+    await writeFile(requestPath, JSON.stringify({ content: "The old shared workspace note is W4P.",
+      title: "Shared workspace note", evidence_kind: "user_statement",
+      requested_block_id: distractor.block_id }));
+    const workspaceWrite = JSON.parse(execFileSync(binary("um-memory"), [
+      "remember-candidate", "--repo-root", root, "--workspace", "smoke",
+      "--profile", "default", "--backend", "mnemosyne", "--request-file", requestPath,
+    ], { env: { ...process.env, ...env }, encoding: "utf8", timeout: 30_000 }));
+    assert.equal(workspaceWrite.saved, true);
+    const recalled = await call("recall", { query: "opaque constraint", logical_block_ids: [leaf.block_id] });
+    assert.ok(Array.isArray(recalled.hits) && recalled.hits.length > 0,
+      JSON.stringify({ saved, recalled }));
+    assert.equal(recalled.hits[0].kind, "user_preference");
+    await call("set_active_mask", { selected_block_ids: [leaf.block_id, distractor.block_id], token_budget: 500, activation_reason: "current smoke task" });
+    const round = async (sessionID) => {
+      const event = { sessionID, system: [], messages: [] };
+      await hooks.get("context")(event);
+      return event.system.map((part) => part.text).join("\n");
+    };
+    assert.match(await round("native-a"), /A7K/);
+    assert.doesNotMatch(await round("native-a"), /W4P/);
+    const updated = await call("amend", { memory_id: saved.memory_id, expected_revision: saved.revision_id, content: "The opaque constraint is B9R.", reason: "source correction", requested_block_id: leaf.block_id });
+    assert.ok(updated.new_id);
+    const next = await round("native-a");
+    assert.match(next, /B9R/);
+    assert.doesNotMatch(next, /A7K/);
+    assert.doesNotMatch(await round("native-b"), /B9R|A7K/);
+    const shared = await call("recall", { query: "opaque constraint", logical_block_ids: [leaf.block_id] }, "native-b");
+    assert.match(shared.hits[0].text, /B9R/);
+    assert.equal(shared.hits[0].authority, "advisory");
+    const legacy = await call("recall", { query: "old shared workspace note", logical_block_ids: [distractor.block_id] }, "native-b");
+    assert.match(legacy.hits[0].text, /W4P/);
+    const hypothesis = await call("remember", { content: "Unverified hypothesis: the second topic constraint is C5L.", title: "Second-topic hypothesis", requested_block_id: secondLeaf.block_id });
+    let mask = await call("get_active_mask", {});
+    assert.ok(mask.mask, JSON.stringify(mask));
+    await call("amend_active_mask", { mask_id: mask.mask.mask_id, expected_revision: mask.mask.revision, selected_block_ids: [secondLeaf.block_id], activation_reason: "switch to the second topic" });
+    const switched = await round("native-a");
+    assert.match(switched, /C5L/);
+    assert.match(switched, /unverified/i);
+    assert.doesNotMatch(switched, /A7K|B9R/);
+    await call("forget", { memory_id: hypothesis.memory_id, reason: "hypothesis refuted by evidence" });
+    assert.doesNotMatch(await round("native-a"), /C5L|A7K|B9R/);
+    mask = await call("get_active_mask", {});
+    await call("transition_active_mask", { mask_id: mask.mask.mask_id, expected_revision: mask.mask.revision, transition: "deactivate", reason: "task finished" });
+    assert.doesNotMatch(await round("native-a"), /B9R|A7K/);
+  } finally {
+    if (cleanup) await cleanup();
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  }
+});
