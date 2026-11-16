@@ -99,6 +99,11 @@ default.
 The pre-turn block is dropped when it is older than 10 minutes, so a dead store
 degrades to "no injection" instead of stale facts.
 
+`userId` (environment `UM_MEM_USER_ID`) enables the `user_global` scope: the
+recall scope chain becomes `workspace:<id>` + `user_global:<id>`, and the focus
+block starts with user-level preferences. Without it the plugin stays
+workspace-only, which is the right default for a shared machine.
+
 ## Verify a real journey
 
 ```console

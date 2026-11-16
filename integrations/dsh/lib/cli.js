@@ -68,14 +68,16 @@ export function runCli(config, args, options = {}) {
 }
 
 /** Run a command that takes a single JSON request/plan file. */
-export function runWithRequest(config, command, payload, extraArgs = []) {
+export async function runWithRequest(config, command, payload, extraArgs = []) {
   const directory = mkdtempSync(join(tmpdir(), 'um-mem-dsh-'))
   try {
     const file = join(directory, 'request.json')
     // Node writes UTF-8 without a BOM, which is what `readJSONFile` expects.
     writeFileSync(file, JSON.stringify(payload), 'utf8')
     const flag = command === 'recall' ? '--plan-file' : '--request-file'
-    return runCli(config, [command, ...commonArgs(config), flag, file, ...extraArgs])
+    // The `await` matters: without it the `finally` below deletes the request
+    // file while the child process is still opening it.
+    return await runCli(config, [command, ...commonArgs(config), flag, file, ...extraArgs])
   } finally {
     try {
       rmSync(directory, { recursive: true, force: true })
