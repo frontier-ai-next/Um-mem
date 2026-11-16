@@ -157,7 +157,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	command := args[0]
 	switch command {
-	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "reconcile":
+	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
 	}
@@ -940,6 +940,17 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return errors.New("--record-id is required for read-record")
 		}
 		record, err := selected.ReadStored(ctx, *recordID)
+		// Reading by stable (root) id should land on the live revision; reading by
+		// an explicit revision id stays exact, so audit reads keep working.
+		if resolved, resolveErr := selected.StableResolve(ctx, *recordID); resolveErr == nil {
+			stable, _ := resolved["stable_id"].(string)
+			current, _ := resolved["record_id"].(string)
+			if stable != "" && stable == *recordID && current != "" && current != *recordID {
+				if latest, latestErr := selected.ReadStored(ctx, current); latestErr == nil {
+					record, err = latest, nil
+				}
+			}
+		}
 		if err != nil {
 			return err
 		}
@@ -959,6 +970,19 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			payload["logical_block_id"] = record.BlockMembership.PrimaryBlockID
 		} else {
 			payload["logical_block_id"] = ""
+		}
+		if resolved, resolveErr := selected.StableResolve(ctx, record.BlockID); resolveErr == nil {
+			payload["stable_id"] = resolved["stable_id"]
+			payload["revisions"] = resolved["revisions"]
+		}
+		return encoder.Encode(payload)
+	case "stable-id":
+		if strings.TrimSpace(*recordID) == "" {
+			return errors.New("--record-id is required for stable-id")
+		}
+		payload, err := selected.StableResolve(ctx, *recordID)
+		if err != nil {
+			return err
 		}
 		return encoder.Encode(payload)
 	case "neighbors":

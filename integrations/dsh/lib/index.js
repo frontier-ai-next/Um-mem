@@ -52,6 +52,16 @@ function extractText(content) {
   return ''
 }
 
+/** The host appends its own context blocks to a user message; the question is
+ *  the last plain paragraph, not the injected snapshot above it. */
+function userTail(text) {
+  const paragraphs = String(text || '').split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
+  const isMarker = (part) => /^(current runtime context|\[|<|#|\||-{3,}|\*{3,})/i.test(part)
+  const plain = paragraphs.filter((part) => !isMarker(part))
+  const last = plain.length ? plain[plain.length - 1] : (paragraphs[paragraphs.length - 1] || '')
+  return last.slice(0, 400)
+}
+
 function toolOutput() {
   return {
     schema: { type: 'string' },
@@ -147,7 +157,7 @@ export function apply(ctx, rawConfig = {}) {
       if (!event || event.type !== 'user/message') return
       const text = extractText(event.data?.content ?? event.data?.message?.content) || extractText(event.message?.content)
       if (!text) return
-      turn = { user: text.slice(0, 400), tools: [], startedAt: Date.now() }
+      turn = { user: userTail(text), tools: [], startedAt: Date.now() }
       void refreshFocus()
       if (!config.inject) return
       // Best-effort semantic recall for this turn; the block shows up from the
@@ -526,6 +536,7 @@ export function apply(ctx, rawConfig = {}) {
           'promoted=' + payload.promoted + ' (' + Math.round((payload.promoted_share || 0) * 100) + '%)',
           'linked=' + payload.linked + ' (' + Math.round((payload.linked_share || 0) * 100) + '%)',
           'labeled=' + payload.labeled + ' (' + Math.round((payload.labeled_share || 0) * 100) + '%)',
+          'promotion_candidates=' + payload.promotion_candidates,
           'edges=' + payload.edges,
         ]
         const blocks = Object.entries(payload.blocks || {}).map(([name, count]) => name + '=' + count).join(', ')

@@ -174,14 +174,19 @@ func (engine *Engine) Stats(ctx context.Context) (map[string]any, error) {
 	byKind := map[string]int{}
 	byStatus := map[string]int{}
 	semantic := map[string]bool{}
+	verifiedBy := map[string]bool{}
 	for _, edge := range edges {
 		if edge.EdgeType == "supersedes" {
 			continue
 		}
 		semantic[edge.SrcID] = true
 		semantic[edge.DstID] = true
+		if edge.EdgeType == "verified_by" {
+			verifiedBy[edge.SrcID] = true
+			verifiedBy[edge.DstID] = true
+		}
 	}
-	live, promoted, linked, labeled := 0, 0, 0, 0
+	live, promoted, linked, labeled, eligible := 0, 0, 0, 0, 0
 	for _, record := range records {
 		if record.Status == "retracted" {
 			continue
@@ -195,6 +200,11 @@ func (engine *Engine) Stats(ctx context.Context) (map[string]any, error) {
 		}
 		if semantic[record.BlockID] {
 			linked++
+		}
+		// A candidate becomes eligible for review when it carries more than one
+		// piece of evidence, or when someone linked a verification to it.
+		if len(record.EvidenceRefs) >= 2 || verifiedBy[record.BlockID] {
+			eligible++
 		}
 		for key := range record.Metadata {
 			if !strings.HasPrefix(key, "operation_") && key != "write_mode" && key != "evidence_kind" &&
@@ -213,7 +223,7 @@ func (engine *Engine) Stats(ctx context.Context) (map[string]any, error) {
 		"ok": true, "workspace_id": engine.config.WorkspaceID, "backend": engine.config.BackendID,
 		"records": live, "retracted": len(records) - live,
 		"blocks": byBlock, "kinds": byKind, "statuses": byStatus,
-		"promoted": promoted, "linked": linked, "labeled": labeled,
+		"promoted": promoted, "linked": linked, "labeled": labeled, "promotion_candidates": eligible,
 		"edges": len(edges), "semantic_edges": len(semantic),
 		"promoted_share": share(promoted, live), "linked_share": share(linked, live),
 		"labeled_share": share(labeled, live),
