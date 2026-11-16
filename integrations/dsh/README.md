@@ -158,3 +158,18 @@ node integrations/dsh/goldset/run.mjs <store>     # hit@1 / hit@k, exit 1 on mis
 
 The current baseline is hit@1 60%, hit@k 73% over 30 questions. Re-run it after
 any change to ranking, scopes or retrieval.
+
+### Moving a store
+
+`export-jsonl` writes records and edges; `import-jsonl --output <file>` replays
+them into another store. Replay semantics, deliberately conservative:
+
+- retired revisions (`retracted`, `superseded`, `withdrawn`) are skipped, so an
+  audit export does not resurrect old revisions as live candidates;
+- imported records are candidates: a file never grants directive authority;
+- edges are recreated only when both endpoints were imported, because a record
+  receives a new id in the target store. Full-fidelity edge migration needs the
+  stable-id mapping and is not implemented yet.
+
+Round trip verified: 354 exported records -> 51 live records, gold set 63/70
+against 60/73 in the source store.
