@@ -186,9 +186,10 @@ func (engine *Engine) Stats(ctx context.Context) (map[string]any, error) {
 			verifiedBy[edge.DstID] = true
 		}
 	}
+	withdrawn := retractedTargets(records, edges)
 	live, promoted, linked, labeled, eligible := 0, 0, 0, 0, 0
 	for _, record := range records {
-		if record.Status == "retracted" || record.Status == "superseded" {
+		if record.Status == "retracted" || record.Status == "superseded" || withdrawn[record.BlockID] {
 			continue
 		}
 		live++
@@ -235,4 +236,24 @@ func share(part, total int) float64 {
 		return 0
 	}
 	return float64(part) / float64(total)
+}
+
+// retractedTargets collects records that a retraction record already covers.
+// Retraction is modelled as a successor record plus a `supersedes` edge, so the
+// original keeps its candidate status and only the edge marks it as withdrawn.
+func retractedTargets(records []memory.MemoryRecord, edges []memory.EdgeRecord) map[string]bool {
+	status := make(map[string]string, len(records))
+	for _, record := range records {
+		status[record.BlockID] = record.Status
+	}
+	targets := map[string]bool{}
+	for _, edge := range edges {
+		if edge.EdgeType != "supersedes" {
+			continue
+		}
+		if status[edge.SrcID] == "retracted" || status[edge.SrcID] == "superseded" {
+			targets[edge.DstID] = true
+		}
+	}
+	return targets
 }
