@@ -26,7 +26,8 @@ type Neighbor struct {
 	LogicalBlock  string `json:"logical_block_id"`
 	Hop           int    `json:"hop"`
 	EdgeType      string `json:"edge_type"`
-	Direction     string `json:"direction"`
+	Direction     string  `json:"direction"`
+	Weight        float64 `json:"weight"`
 	Reason        string `json:"reason,omitempty"`
 }
 
@@ -106,6 +107,7 @@ func (engine *Engine) Neighbors(ctx context.Context, request NeighborRequest) (m
 					RecordID: record.BlockID, Title: record.Title, Kind: record.Kind,
 					Status: record.Status, LogicalBlock: logicalBlockOf(record), Hop: hop,
 					EdgeType: edge.EdgeType, Direction: direction, Reason: edge.Reason,
+					Weight: edgeWeight(edge),
 				})
 				if len(neighbors) >= limit {
 					break
@@ -135,4 +137,15 @@ func logicalBlockOf(record memory.MemoryRecord) string {
 		return record.BlockMembership.PrimaryBlockID
 	}
 	return record.BlockID
+}
+
+func edgeWeight(edge memory.EdgeRecord) float64 {
+	if edge.Weight == "" {
+		return 1
+	}
+	value, err := edge.Weight.Float64()
+	if err != nil || value <= 0 {
+		return 1
+	}
+	return value
 }

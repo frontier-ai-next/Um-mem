@@ -56,7 +56,9 @@ function extractText(content) {
  *  the last plain paragraph, not the injected snapshot above it. */
 function userTail(text) {
   const paragraphs = String(text || '').split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
-  const isMarker = (part) => /^(current runtime context|\[|<|#|\||-{3,}|\*{3,})/i.test(part)
+  const isMarker = (part) =>
+    /^(current |approval prompts|the runtime context|you are interacting|tokens prefixed|non-zero exits|use the |track every|web_search|web_fetch|cite the url|start independent|when only waiting|create_goal|only create|use the workflow|<|\[|#|\||-{3,}|\*{3,})/i.test(part) ||
+    /runtime-context snapshots|this snapshot supersedes|deepseek harness web gui url/i.test(part)
   const plain = paragraphs.filter((part) => !isMarker(part))
   const last = plain.length ? plain[plain.length - 1] : (paragraphs[paragraphs.length - 1] || '')
   return last.slice(0, 400)
@@ -337,7 +339,7 @@ export function apply(ctx, rawConfig = {}) {
         }
         if (linked.length) {
           text += '\n\nСвязано ребром:\n' + linked
-            .map((neighbor) => '- [' + neighbor.edge_type + '] ' + neighbor.title +
+            .map((neighbor) => '- [' + neighbor.edge_type + ' w=' + Number(neighbor.weight || 1).toFixed(2) + '] ' + neighbor.title +
               ' (id=' + neighbor.record_id + ', ' + neighbor.logical_block_id + ')' +
               (neighbor.via ? ' — через «' + neighbor.via + '»' : ''))
             .join('\n')
@@ -524,6 +526,29 @@ export function apply(ctx, rawConfig = {}) {
           '--scope-id', config.workspace,
         ])
         return renderRecall(records, { limit })
+      },
+    },
+    {
+      name: 'um_mem_contradictions',
+      description: 'Пары записей на одну тему, которые могут противоречить друг другу: похожий текст, разные canonical_key, нет связи supersedes. Ничего не меняет — только предлагает ревью, чтобы память не обрастала противоречиями молча.',
+      parameters: {
+        type: 'object',
+        properties: {
+          threshold: { type: 'number', description: 'Порог похожести (по умолчанию 0.55).' },
+          limit: { type: 'integer', description: 'Сколько пар вернуть (по умолчанию 10).' },
+        },
+      },
+      output: toolOutput(),
+      async execute(args = {}) {
+        const threshold = Number(args.threshold) > 0 ? Number(args.threshold) : 0.55
+        const limit = Number.isFinite(Number(args.limit)) && Number(args.limit) > 0 ? Math.trunc(Number(args.limit)) : 10
+        const payload = await runCli(config, ['contradictions', ...commonArgs(config),
+          '--conflict-threshold', String(threshold), '--neighbor-limit', String(limit)])
+        const pairs = payload.pairs || []
+        if (!pairs.length) return 'UM-MEM: противоречий не найдено (порог ' + threshold + ').'
+        return 'пар: ' + payload.count + '\n' + pairs
+          .map((pair) => '- ' + Number(pair.similarity).toFixed(2) + ' ' + pair.a_title + ' <-> ' + pair.b_title)
+          .join('\n')
       },
     },
     {
