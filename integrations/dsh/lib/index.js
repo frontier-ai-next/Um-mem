@@ -286,6 +286,7 @@ export function apply(ctx, rawConfig = {}) {
         properties: {
           query: { type: 'string', description: 'Самодостаточный запрос: что именно нужно вспомнить.' },
           block: { type: 'string', description: 'Опционально: ограничить логическим блоком, например stable_project_facts или decisions_and_contracts.' },
+          facet: { type: 'string', description: 'Опционально: точный фильтр по метаданным в виде um.ключ=значение, например um.source=um-mem-core.' },
           limit: { type: 'integer', description: 'Сколько записей вернуть (по умолчанию 8).' },
         },
         required: ['query'],
@@ -310,7 +311,9 @@ export function apply(ctx, rawConfig = {}) {
         const block = String(args.block ?? '').trim()
         if (block) plan.logical_block_ids = [block]
         else plan.search_all = true
-        const records = await runWithRequest(config, 'recall', plan)
+        const facet = String(args.facet ?? '').trim()
+        if (facet && !facet.includes('=')) throw new Error('um_mem_recall: facet must look like um.key=value')
+        const records = await runWithRequest(config, 'recall', plan, facet ? ['--facet', facet] : [])
         const compact = compactRecords(records)
         let text = renderRecall(records, { limit })
         // Links were stored but nothing read them, so a connected record stayed
@@ -521,6 +524,24 @@ export function apply(ctx, rawConfig = {}) {
           '--scope-id', config.workspace,
         ])
         return renderRecall(records, { limit })
+      },
+    },
+    {
+      name: 'um_mem_promotion_candidates',
+      description: 'Записи, готовые к рассмотрению на подтверждение: несут больше одного свидетельства, подтверждены ребром supports/verified_by или имеют human_approval. Само подтверждение остаётся ревью, но очередь должна быть видна — иначе память навсегда остаётся черновиком.',
+      parameters: {
+        type: 'object',
+        properties: { limit: { type: 'integer', description: 'Сколько кандидатов вернуть (по умолчанию 15).' } },
+      },
+      output: toolOutput(),
+      async execute(args = {}) {
+        const limit = Number.isFinite(Number(args.limit)) && Number(args.limit) > 0 ? Math.trunc(Number(args.limit)) : 15
+        const payload = await runCli(config, ['promotion-candidates', ...commonArgs(config), '--neighbor-limit', String(limit)])
+        const list = payload.candidates || []
+        if (!list.length) return 'UM-MEM: очередь пуста — ни одна запись не набрала второго свидетельства.'
+        return 'кандидатов: ' + payload.count + '\n' + list
+          .map((item) => '- ' + item.title + ' (' + item.logical_block_id + ', ' + item.kind + ') — ' + (item.reasons || []).join(', '))
+          .join('\n')
       },
     },
     {

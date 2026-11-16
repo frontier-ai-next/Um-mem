@@ -157,7 +157,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	command := args[0]
 	switch command {
-	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "reconcile":
+	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "promotion-candidates", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
 	}
@@ -202,6 +202,8 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	neighborLimit := flags.Int("neighbor-limit", 12, "neighbors result limit")
 	autoLinkOn := flags.Bool("auto-link", true, "attach a related_to edge after a candidate write")
 	linkThreshold := flags.Float64("link-threshold", 0.12, "minimum lexical similarity for auto-link")
+	facets := &scopeFlag{}
+	flags.Var(facets, "facet", "recall facet filter as key=value, repeatable")
 	includeRetracted := flags.Bool("include-retracted", false, "include noncurrent record revisions in list-records")
 	mapDepth := flags.Int("depth", 1, "block-map tree depth")
 	mapIncludeMeta := flags.Bool("include-meta", false, "include protected catalog taxonomy in block-map")
@@ -1007,11 +1009,27 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		if err := readJSONFile(*planFile, &plan); err != nil {
 			return err
 		}
+		for _, item := range facets.values {
+			key, value, ok := strings.Cut(item, "=")
+			if !ok || strings.TrimSpace(key) == "" {
+				return errors.New("--facet must be key=value")
+			}
+			if plan.Facets == nil {
+				plan.Facets = map[string][]string{}
+			}
+			plan.Facets[strings.TrimSpace(key)] = append(plan.Facets[strings.TrimSpace(key)], strings.TrimSpace(value))
+		}
 		records, err := selected.Recall(ctx, plan)
 		if err != nil {
 			return err
 		}
 		return encoder.Encode(records)
+	case "promotion-candidates":
+		payload, err := selected.PromotionCandidates(ctx, *neighborLimit)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
 	case "recent":
 		records, err := selected.Recent(ctx, engine.RecentRequest{Limit: *recentLimit,
 			Since: *recentSince, Scope: recentScope.String(), ScopeID: *recentScopeID,
