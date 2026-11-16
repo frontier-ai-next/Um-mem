@@ -12,12 +12,30 @@
  * failed write is reported as an error instead of a silent success.
  */
 
+import { appendFileSync, mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
 import { commonArgs, runCli, runWithRequest } from './cli.js'
 import { resolveConfig } from './config.js'
 import { compactRecords, renderFocus, renderHealth, renderRecall, renderWriteResult } from './view.js'
 
 export const name = 'um-mem'
 export const inject = ['tools', 'systemPrompt']
+
+// Capture used to fail silently: an episode simply never appeared and there was
+// no way to tell a host that never called the hook from a filter that rejected the
+// text. This log answers that question without guessing.
+function logEvent(kind, data) {
+  try {
+    const dir = join(homedir(), '.um-mem')
+    mkdirSync(dir, { recursive: true })
+    appendFileSync(join(dir, 'plugin-events.log'),
+      JSON.stringify({ at: new Date().toISOString(), kind, ...data }) + '\n', 'utf8')
+  } catch {
+    /* diagnostics must never break the turn */
+  }
+}
 
 /** Static rules must stay byte-stable: they are the prefix-cache anchor. */
 const RULES = `## UM-MEM (постоянная память)
@@ -99,6 +117,7 @@ export function apply(ctx, rawConfig = {}) {
   // store only grows when the model decides to write, which is why a session of
   // real work could leave no trace at all.
   let turn = { user: '', tools: [], startedAt: 0 }
+  let recording = false
 
   function renderFocusFrom(records) {
     if (!config.inject) return ''
@@ -158,10 +177,22 @@ export function apply(ctx, rawConfig = {}) {
 
   const onSessionEvent = (session, event) => {
     try {
-      if (!event || event.type !== 'user/message') return
+      if (!event || event.type !== 'user/message') {
+        logEvent('session/event', { type: event?.type || 'unknown' })
+        return
+      }
       const text = extractText(event.data?.content ?? event.data?.message?.content) || extractText(event.message?.content)
-      if (!text) return
-      turn = { user: userTail(text), tools: [], startedAt: Date.now() }
+      // A turn that was never closed by the host is flushed here: the next user
+      // message is proof the previous turn ended, and losing the episode because a
+      // hook did not fire is worse than writing it one message late.
+      if (turn.user && turn.tools.length && !recording) void recordEpisode('deferred')
+      if (!text) {
+        logEvent('session/event', { type: 'user/message', text: 0 })
+        return
+      }
+      const tailText = userTail(text)
+      logEvent('session/event', { type: 'user/message', text: text.length, captured: tailText.length })
+      turn = { user: tailText, tools: [], startedAt: Date.now() }
       void refreshFocus()
       if (!config.inject) return
       // Best-effort semantic recall for this turn; the block shows up from the
@@ -221,10 +252,23 @@ export function apply(ctx, rawConfig = {}) {
     ctx.logger?.debug?.('[dsh-um-mem] no pre-step hook: ' + String(error))
   }
 
-  async function recordEpisode() {
+  async function recordEpisode(reason) {
+    if (recording) return
+    recording = true
     const snapshot = turn
     turn = { user: '', tools: [], startedAt: 0 }
-    if (!snapshot.user || snapshot.tools.length === 0) return
+    try {
+      await writeEpisode(snapshot, reason)
+    } finally {
+      recording = false
+    }
+  }
+
+  async function writeEpisode(snapshot, reason) {
+    if (!snapshot.user || snapshot.tools.length === 0) {
+      logEvent('episode/skip', { reason: reason || 'empty', user: snapshot.user ? snapshot.user.length : 0, tools: snapshot.tools.length })
+      return
+    }
     const minutes = snapshot.startedAt ? Math.max(1, Math.round((Date.now() - snapshot.startedAt) / 60000)) : 0
     const content = 'Раунд: запрос «' + snapshot.user.slice(0, 220) + '»; инструменты: ' +
       snapshot.tools.slice(0, 8).join(', ') + (minutes ? '; ~' + minutes + ' мин' : '')
@@ -240,6 +284,7 @@ export function apply(ctx, rawConfig = {}) {
         ...(config.userId ? { user_id: config.userId } : {}),
       })
       void refreshFocus()
+      logEvent('episode/write', { reason: reason || 'turn-stop', user: snapshot.user.length, tools: snapshot.tools.length })
     } catch (error) {
       ctx.logger?.debug?.('[dsh-um-mem] episode capture failed: ' + String(error?.message || error))
     }
@@ -257,8 +302,9 @@ export function apply(ctx, rawConfig = {}) {
 
   try {
     ctx.on('agent/turn-stopping', (...args) => {
+      logEvent('turn-stopping', { user: turn.user ? turn.user.length : 0, tools: turn.tools.length })
       try {
-        void recordEpisode()
+        void recordEpisode('turn-stop')
       } catch {
         /* capture must never break the turn */
       }
