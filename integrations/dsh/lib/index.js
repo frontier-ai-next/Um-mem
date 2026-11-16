@@ -180,6 +180,28 @@ export function apply(ctx, rawConfig = {}) {
     ctx.logger?.warn?.('[dsh-um-mem] cannot observe session events: ' + String(error))
   }
 
+  // Warm the block before the next request assembles: the sync `text()` renderer
+  // cannot await a recall, so the turn that arrives right after a user message
+  // would otherwise show the previous turn's snapshot.
+  const warm = () => {
+    if (!config.inject) return
+    if (Date.now() - focusAt < 60000) return
+    void refreshFocus()
+  }
+  try {
+    ctx.on('agent/pre-step', (...args) => {
+      try {
+        warm()
+      } catch {
+        /* warm-up must never break the step */
+      }
+      const next = args[args.length - 1]
+      return typeof next === 'function' ? next() : undefined
+    })
+  } catch (error) {
+    ctx.logger?.debug?.('[dsh-um-mem] no pre-step hook: ' + String(error))
+  }
+
   disposers.push(ctx.systemPrompt.section({ name: 'dsh:um-mem-rules', order: SECTION_ORDER, text: () => RULES }))
   disposers.push(ctx.systemPrompt.context({
     name: 'dsh:um-mem-focus',

@@ -81,6 +81,23 @@ func readJSONFile(path string, target any) error {
 	return nil
 }
 
+// nameRevisionOutcome gives a mutation receipt the two names a host adapter
+// needs: `record_id` is the record as it exists now, `revision_id` is the
+// revision that operation wrote. The engine reports those under `new_id` /
+// `new_revision` for amend and under `block_id` / `revision_id` for forget,
+// which reads as "the record changed its id" to any caller.
+func nameRevisionOutcome(payload map[string]any, memoryID string) map[string]any {
+	if revision, ok := payload["new_revision"].(string); ok && revision != "" {
+		payload["revision_id"] = revision
+	}
+	if current, ok := payload["new_id"].(string); ok && current != "" {
+		payload["record_id"] = current
+	} else if trimmed := strings.TrimSpace(memoryID); trimmed != "" {
+		payload["record_id"] = trimmed
+	}
+	return payload
+}
+
 type scopeFlag struct{ values []string }
 
 func (flag *scopeFlag) String() string {
@@ -722,7 +739,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return err
 		}
 		payload["backend"] = *backend
-		return encoder.Encode(payload)
+		return encoder.Encode(nameRevisionOutcome(payload, request.MemoryID))
 	case "deprecate":
 		var request engine.DeprecateRequest
 		if err := readJSONFile(*requestFile, &request); err != nil {
@@ -733,7 +750,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return err
 		}
 		payload["backend"] = *backend
-		return encoder.Encode(payload)
+		return encoder.Encode(nameRevisionOutcome(payload, request.MemoryID))
 	case "rollback":
 		var request engine.RollbackRequest
 		if err := readJSONFile(*requestFile, &request); err != nil {
@@ -755,7 +772,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return err
 		}
 		payload["backend"] = *backend
-		return encoder.Encode(payload)
+		return encoder.Encode(nameRevisionOutcome(payload, request.MemoryID))
 	case "verification-subject":
 		var request engine.VerificationSubjectRequest
 		if err := readJSONFile(*requestFile, &request); err != nil {

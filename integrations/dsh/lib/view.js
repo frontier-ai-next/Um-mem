@@ -86,10 +86,15 @@ export function renderFocus(records, { workspace, maxChars = 1400, limit = 12 } 
 
 export function renderWriteResult(payload, { verb }) {
   if (!payload || typeof payload !== 'object') return 'UM-MEM: ' + verb + ' returned no payload'
-  const recordId = clean(payload.record_id || payload.memory_id || payload.block_id || '')
+  const recordId = clean(payload.record_id || payload.new_id || payload.memory_id || payload.revision_of || '')
+  const revision = clean(payload.revision_id || payload.new_revision || '')
   const decision = payload.route_decision || {}
   const bits = [verb + ': ' + (payload.saved === false ? 'not saved' : 'saved')]
   if (recordId) bits.push('record=' + recordId)
+  if (revision) bits.push('rev=' + revision)
+  if (payload.lifecycle && payload.lifecycle.old_status) {
+    bits.push('lifecycle=' + clean(payload.lifecycle.old_status) + '→' + clean(payload.lifecycle.new_status))
+  }
   if (decision.block_id) bits.push('block=' + clean(decision.block_id))
   if (decision.authority) bits.push('authority=' + clean(decision.authority))
   if (decision.status) bits.push('status=' + clean(decision.status))

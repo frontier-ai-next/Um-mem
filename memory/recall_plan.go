@@ -159,6 +159,13 @@ func (p *RecallPlan) Validate() error {
 	if p.SearchAll && len(p.LogicalBlockIDs) > 0 {
 		return errors.New("RecallPlan search_all cannot be combined with logical_block_ids")
 	}
+	// A caller that names neither logical blocks nor exact record ids is asking
+	// for a recall over everything it can see. Requiring `search_all` to be set
+	// explicitly made that obvious case fail on backends that cannot scan without
+	// a target, with an error the caller could not act on.
+	if !p.SearchAll && len(p.LogicalBlockIDs) == 0 && len(p.RecordIDs) == 0 {
+		p.SearchAll = true
+	}
 	if p.TemporalMode != "current" && p.TemporalMode != "historical" {
 		return errors.New("RecallPlan temporal_mode must be current or historical")
 	}

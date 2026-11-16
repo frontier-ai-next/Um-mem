@@ -925,7 +925,7 @@ function renderMinimap(positions=state.positions,nodes=graphNodes,projection=nul
   const bounds=graphBounds(),scene=$('minimap-scene');scene.replaceChildren();$('minimap-wrap').hidden=!$('show-minimap').checked||nodes.length<8;
   if(!bounds&&!projection)return;miniProjection=projection||mapProjection(bounds);const t=miniProjection,byId=new Map(nodes.map(n=>[n.id,n])),path=graphPath();
   for(const n of nodes){const a=positions[n.parent],b=positions[n.id];if(!a||!b)continue;
-    scene.append(svg('path',{class:'minimap-link'+(path.has(n.parent)&&path.has(n.id)?' in-path':''),style:`opacity:${.5*(b.opacity??1)}`,d:`M ${a.x*t.k+t.x} ${a.y*t.k+t.y} L ${b.x*t.k+t.x} ${b.y*t.k+t.y}`}));
+    scene.append(svg('path',{class:'minimap-link'+(path.has(n.parent)&&path.has(n.id)?' in-path':''),opacity:`${.5*(b.opacity??1)}`,d:`M ${a.x*t.k+t.x} ${a.y*t.k+t.y} L ${b.x*t.k+t.x} ${b.y*t.k+t.y}`}));
   }
   for(const n of byId.values()){const p=positions[n.id],dot=svg('circle',{class:'minimap-node'+(path.has(n.id)?' in-path':''),'data-map-id':n.id,cx:p.x*t.k+t.x,cy:p.y*t.k+t.y,r:n.type==='block'?2.2:1.3,fill:n.color,opacity:p.opacity??1});dot.append(svg('title',{},n.title));scene.append(dot);}
   updateMinimapViewport();
