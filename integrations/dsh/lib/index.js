@@ -66,7 +66,9 @@ function operationId() {
 }
 
 function scopeChain(config) {
-  return ['workspace:' + config.workspace]
+  const chain = ['workspace:' + config.workspace]
+  if (config.userId) chain.push('user_global:' + config.userId)
+  return chain
 }
 
 export function apply(ctx, rawConfig = {}) {
@@ -103,14 +105,31 @@ export function apply(ctx, rawConfig = {}) {
     refreshing = true
     lastRefreshStart = now
     try {
-      const records = await runCli(config, [
+      const workspaceRecords = await runCli(config, [
         'recent',
         ...commonArgs(config),
         '--limit', String(config.focusLimit),
         '--scope', 'workspace',
         '--scope-id', config.workspace,
       ])
-      scheduleFocus(records)
+      let userRecords = []
+      if (config.userId) {
+        try {
+          userRecords = await runCli(config, [
+            'recent',
+            ...commonArgs(config),
+            '--limit', '6',
+            '--scope', 'user_global',
+            '--scope-id', config.userId,
+          ])
+        } catch {
+          userRecords = []
+        }
+      }
+      scheduleFocus([
+        ...(Array.isArray(userRecords) ? userRecords : []),
+        ...(Array.isArray(workspaceRecords) ? workspaceRecords : []),
+      ])
       focusSource = 'recent'
     } catch (error) {
       ctx.logger?.debug?.('[dsh-um-mem] focus refresh failed: ' + String(error?.message || error))
@@ -138,6 +157,7 @@ export function apply(ctx, rawConfig = {}) {
             source_horizon: 'durable',
             temporal_mode: 'current',
             retrieval_mode: 'semantic',
+            search_all: true,
             include_candidates: true,
             limit: config.limit,
             max_tokens: 1800,
@@ -204,6 +224,7 @@ export function apply(ctx, rawConfig = {}) {
         }
         const block = String(args.block ?? '').trim()
         if (block) plan.logical_block_ids = [block]
+        else plan.search_all = true
         const records = await runWithRequest(config, 'recall', plan)
         return renderRecall(records, { limit })
       },
@@ -240,6 +261,7 @@ export function apply(ctx, rawConfig = {}) {
           requested_block_id: String(args.block ?? '').trim() || 'stable_project_facts',
           evidence_kind: String(args.evidence_kind ?? '').trim() || 'agent_inference',
         }
+        if (config.userId) payload.user_id = config.userId
         const result = await runWithRequest(config, 'remember-candidate', payload)
         void refreshFocus()
         return renderWriteResult(result, { verb: 'remember' })

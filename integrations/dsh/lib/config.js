@@ -1,11 +1,17 @@
-/** Resolve the plugin configuration from the patch-row config and the environment. */
+/** Resolve the plugin configuration: environment > patch-row config > config file > defaults. */
 
-import { existsSync, statSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 
 const DEFAULT_BACKEND = 'mnemosyne'
 const EXE = process.platform === 'win32' ? 'um-memory.exe' : 'um-memory'
+
+/** The package directory (`.../integrations/dsh`), where a local config may live. */
+function packageRoot() {
+  return resolve(dirname(fileURLToPath(import.meta.url)), '..')
+}
 
 function text(...values) {
   for (const value of values) {
@@ -39,24 +45,45 @@ function binaryFor(candidate) {
   return candidate
 }
 
+/** Optional per-machine config: `~/.um-mem/dsh.json` (or UM_MEM_DSH_CONFIG)
+ *  and `um-mem.config.json` next to this package. */
+export function readConfigFile() {
+  const explicit = text(process.env.UM_MEM_DSH_CONFIG)
+  const candidates = [
+    explicit,
+    join(homedir(), '.um-mem', 'dsh.json'),
+    join(packageRoot(), 'um-mem.config.json'),
+  ].filter(Boolean)
+  for (const candidate of candidates) {
+    try {
+      if (!existsSync(candidate)) continue
+      const parsed = JSON.parse(readFileSync(candidate, 'utf8'))
+      if (parsed && typeof parsed === 'object') return parsed
+    } catch {
+      /* a broken config file must not take the plugin down */
+    }
+  }
+  return {}
+}
+
 export function resolveConfig(raw = {}) {
   const env = process.env
+  const file = readConfigFile()
   const home = homedir()
   const homeBin = join(home, '.um-mem', 'bin')
-  const configured = binaryFor(text(raw.binary, env.UM_MEM_BIN))
-  const binary = configured
-    ? binaryFor(configured) || join(configured, EXE)
-    : join(homeBin, EXE)
+  const configured = binaryFor(text(env.UM_MEM_BIN, raw.binary, file.binary))
+  const binary = configured || join(homeBin, EXE)
   return {
-    binary: binary || join(homeBin, EXE),
-    store: resolve(text(raw.store, env.UM_MEM_STORE) || join(home, '.um-mem', 'store')),
-    workspace: text(raw.workspace, env.UM_MEM_WORKSPACE) || slugFor(basename(process.cwd())),
-    profile: text(raw.profile, env.UM_MEM_PROFILE) || 'default',
-    backend: text(raw.backend, env.UM_MEM_BACKEND) || DEFAULT_BACKEND,
-    limit: positive(raw.limit, 8),
-    focusLimit: positive(raw.focusLimit, 12),
-    focusMaxChars: positive(raw.focusMaxChars, 1400),
-    timeoutMs: positive(raw.timeoutMs, 30000),
-    inject: raw.inject !== false,
+    binary: binaryFor(binary) || join(binary, EXE),
+    store: resolve(text(env.UM_MEM_STORE, raw.store, file.store) || join(home, '.um-mem', 'store')),
+    workspace: text(env.UM_MEM_WORKSPACE, raw.workspace, file.workspace) || slugFor(basename(process.cwd())),
+    profile: text(env.UM_MEM_PROFILE, raw.profile, file.profile) || 'default',
+    userId: text(env.UM_MEM_USER_ID, raw.userId, file.userId),
+    backend: text(env.UM_MEM_BACKEND, raw.backend, file.backend) || DEFAULT_BACKEND,
+    limit: positive(raw.limit, positive(file.limit, 8)),
+    focusLimit: positive(raw.focusLimit, positive(file.focusLimit, 12)),
+    focusMaxChars: positive(raw.focusMaxChars, positive(file.focusMaxChars, 1400)),
+    timeoutMs: positive(raw.timeoutMs, positive(file.timeoutMs, 30000)),
+    inject: raw.inject ?? file.inject ?? true,
   }
 }

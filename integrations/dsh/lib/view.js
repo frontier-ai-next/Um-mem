@@ -98,6 +98,8 @@ export function renderWriteResult(payload, { verb }) {
   if (Array.isArray(decision.policy_issues) && decision.policy_issues.length) {
     bits.push('policy_issues=' + decision.policy_issues.map(clean).join(','))
   }
+  if (decision.suggested_block_id) bits.push('suggested_block=' + clean(decision.suggested_block_id))
+  if (decision.suggested_action) bits.push('suggested_action=' + clean(decision.suggested_action))
   if (payload.receipt?.projection_pending) bits.push('projection=pending')
   return bits.join(' | ')
 }
