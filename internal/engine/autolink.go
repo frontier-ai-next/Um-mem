@@ -188,7 +188,7 @@ func (engine *Engine) Stats(ctx context.Context) (map[string]any, error) {
 	}
 	live, promoted, linked, labeled, eligible := 0, 0, 0, 0, 0
 	for _, record := range records {
-		if record.Status == "retracted" {
+		if record.Status == "retracted" || record.Status == "superseded" {
 			continue
 		}
 		live++
