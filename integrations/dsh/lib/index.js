@@ -399,14 +399,17 @@ export function apply(ctx, rawConfig = {}) {
           ? [writeRef, { ref_type: 'file_snapshot', ref_id: fileRef, produced_by: 'agent', producer_id: 'dsh-um-mem' }]
           : [writeRef]
         const rawMeta = String(args.metadata ?? '').trim()
+        const labels = { source: 'dsh' }
         if (rawMeta) {
           try {
             const parsed = JSON.parse(rawMeta)
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload.metadata = parsed
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) Object.assign(labels, parsed)
+            else throw new Error('not an object')
           } catch {
             throw new Error('um_mem_remember: metadata must be a JSON object')
           }
         }
+        payload.metadata = labels
         const result = await runWithRequest(config, 'remember-candidate', payload)
         void refreshFocus()
         return renderWriteResult(result, { verb: 'remember' })
