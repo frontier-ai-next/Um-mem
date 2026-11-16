@@ -137,3 +137,24 @@ Compare the same control queries before and after on the copy; only then repeat
 the run against the live store. A retirement is stored as a successor record
 plus a `supersedes` edge, so the original keeps `status=candidate` and every
 consumer must read `withdrawn` rather than the status.
+
+## Operating the memory
+
+| Command | What it is for |
+| --- | --- |
+| `memory-stats` | maturity view: live, promoted, linked, labelled, promotion candidates |
+| `promotion-candidates` | records that carry two witnesses, a support edge, or a human approval |
+| `approve --record-id <id>` | a human vouches for a record (`human_approval` evidence); the tribunal is still the only path to directive authority |
+| `contradictions` | same-topic pairs that may disagree; nothing is rewritten |
+| `consolidation [--apply --confirm-consolidation]` | duplicate plan; dry run unless both flags are present |
+| `export-jsonl --output <path> [--current-only]` | the whole store as JSONL (records with `withdrawn`, plus edges) |
+| `neighbors --record-id <id> [--depth 2]` | the local graph around one record, with edge type and weight |
+
+Quality is measured, not remembered:
+
+```console
+node integrations/dsh/goldset/run.mjs <store>     # hit@1 / hit@k, exit 1 on miss
+```
+
+The current baseline is hit@1 60%, hit@k 73% over 30 questions. Re-run it after
+any change to ranking, scopes or retrieval.

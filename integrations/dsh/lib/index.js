@@ -60,7 +60,9 @@ function userTail(text) {
     /^(current |approval prompts|the runtime context|you are interacting|tokens prefixed|non-zero exits|use the |track every|web_search|web_fetch|cite the url|start independent|when only waiting|create_goal|only create|use the workflow|<|\[|#|\||-{3,}|\*{3,}|-\s|\*\s)/i.test(part) ||
     /runtime-context snapshots|this snapshot supersedes|deepseek harness web gui url|\(block=|tags=|\bblock=/i.test(part)
   const plain = paragraphs.filter((part) => !isMarker(part))
-  const first = plain.length ? plain[0] : (paragraphs[0] || '')
+  // No plain paragraph means the message carried only harness context: better to
+  // record nothing than to store the envelope as if it were the question.
+  const first = plain.length ? plain[0] : ''
   return first.slice(0, 400)
 }
 
