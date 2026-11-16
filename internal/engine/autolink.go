@@ -181,7 +181,7 @@ func (engine *Engine) Stats(ctx context.Context) (map[string]any, error) {
 		}
 		semantic[edge.SrcID] = true
 		semantic[edge.DstID] = true
-		if edge.EdgeType == "verified_by" {
+		if edge.EdgeType == "verified_by" || edge.EdgeType == "supports" {
 			verifiedBy[edge.SrcID] = true
 			verifiedBy[edge.DstID] = true
 		}
@@ -204,7 +204,7 @@ func (engine *Engine) Stats(ctx context.Context) (map[string]any, error) {
 		}
 		// A candidate becomes eligible for review when it carries more than one
 		// piece of evidence, or when someone linked a verification to it.
-		if len(record.EvidenceRefs) >= 2 || verifiedBy[record.BlockID] {
+		if len(promotionReasons(record, verifiedBy)) > 0 {
 			eligible++
 		}
 		for key := range record.Metadata {

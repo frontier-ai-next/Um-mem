@@ -39,6 +39,7 @@ func (engine *Engine) PromotionCandidates(ctx context.Context, limit int) (map[s
 	for _, record := range records {
 		byID[record.BlockID] = record
 	}
+	withdrawn := retractedTargets(records, edges)
 	support := map[string]bool{}
 	for _, edge := range edges {
 		if edge.EdgeType == "supports" || edge.EdgeType == "verified_by" {
@@ -52,19 +53,10 @@ func (engine *Engine) PromotionCandidates(ctx context.Context, limit int) (map[s
 		if record.Status != "candidate" && record.Status != "verified" {
 			continue
 		}
-		reasons := make([]string, 0, 3)
-		for _, ref := range record.EvidenceRefs {
-			if ref.RefType == "human_approval" {
-				reasons = append(reasons, "human_approval")
-				break
-			}
+		if withdrawn[record.BlockID] {
+			continue
 		}
-		if len(record.EvidenceRefs) >= 2 {
-			reasons = append(reasons, "multiple_evidence")
-		}
-		if support[record.BlockID] {
-			reasons = append(reasons, "supported_by_edge")
-		}
+		reasons := promotionReasons(record, support)
 		if len(reasons) == 0 {
 			continue
 		}
@@ -88,6 +80,25 @@ func (engine *Engine) PromotionCandidates(ctx context.Context, limit int) (map[s
 		"workspace_id": engine.config.WorkspaceID, "backend": engine.config.BackendID,
 		"note": "promotion stays reviewed; these records only qualify for review",
 	}, nil
+}
+
+// promotionReasons is the single definition of "ready for review". Statistics and
+// the queue must agree, otherwise the two numbers argue with each other.
+func promotionReasons(record memory.MemoryRecord, support map[string]bool) []string {
+	reasons := make([]string, 0, 3)
+	for _, ref := range record.EvidenceRefs {
+		if ref.RefType == "human_approval" {
+			reasons = append(reasons, "human_approval")
+			break
+		}
+	}
+	if len(record.EvidenceRefs) >= 2 {
+		reasons = append(reasons, "multiple_evidence")
+	}
+	if support[record.BlockID] {
+		reasons = append(reasons, "supported_by_edge")
+	}
+	return reasons
 }
 
 func stableRoot(byID map[string]memory.MemoryRecord, start string) string {

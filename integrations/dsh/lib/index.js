@@ -57,8 +57,8 @@ function extractText(content) {
 function userTail(text) {
   const paragraphs = String(text || '').split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
   const isMarker = (part) =>
-    /^(current |approval prompts|the runtime context|you are interacting|tokens prefixed|non-zero exits|use the |track every|web_search|web_fetch|cite the url|start independent|when only waiting|create_goal|only create|use the workflow|<|\[|#|\||-{3,}|\*{3,})/i.test(part) ||
-    /runtime-context snapshots|this snapshot supersedes|deepseek harness web gui url/i.test(part)
+    /^(current |approval prompts|the runtime context|you are interacting|tokens prefixed|non-zero exits|use the |track every|web_search|web_fetch|cite the url|start independent|when only waiting|create_goal|only create|use the workflow|<|\[|#|\||-{3,}|\*{3,}|-\s|\*\s)/i.test(part) ||
+    /runtime-context snapshots|this snapshot supersedes|deepseek harness web gui url|\(block=|tags=|\bblock=/i.test(part)
   const plain = paragraphs.filter((part) => !isMarker(part))
   const first = plain.length ? plain[0] : (paragraphs[0] || '')
   return first.slice(0, 400)
