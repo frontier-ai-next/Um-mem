@@ -17,6 +17,10 @@ __pycache__/
 node_modules/
 dist/
 build/
+bin/
+.gocache/
+.gomodcache/
+.gopath/
 runs/
 unused/
 .codex*

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -59,7 +61,14 @@ func readJSONFile(path string, target any) error {
 		return err
 	}
 	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 4<<20))
+	// Windows tooling (Windows PowerShell 5 `Set-Content -Encoding utf8`, some
+	// editors) prepends a UTF-8 BOM, which encoding/json rejects. Strip it so a
+	// hand-written request file is accepted on the platform the CLI ships for.
+	reader := bufio.NewReader(file)
+	if head, peekErr := reader.Peek(3); peekErr == nil && bytes.Equal(head, []byte{0xEF, 0xBB, 0xBF}) {
+		_, _ = reader.Discard(3)
+	}
+	decoder := json.NewDecoder(io.LimitReader(reader, 4<<20))
 	decoder.DisallowUnknownFields()
 	decoder.UseNumber()
 	if err := decoder.Decode(target); err != nil {

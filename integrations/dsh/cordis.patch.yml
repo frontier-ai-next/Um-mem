@@ -1,0 +1,9 @@
+# dsh-um-mem bundle patch: inserts the UM-MEM host plugin row into the profile
+# roster. The plugin is host-only (no browser half): it registers agent tools,
+# renders a bounded pre-turn memory block, and exposes a loopback health route.
+#
+# Configuration is read from the plugin row (`config`) and from the environment.
+# Every field is optional; see integrations/dsh/README.md for the defaults.
+- insert:
+    - id: um-mem
+      name: dsh-um-mem

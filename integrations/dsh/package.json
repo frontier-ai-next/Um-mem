@@ -1,0 +1,41 @@
+{
+  "name": "dsh-um-mem",
+  "version": "0.1.0",
+  "description": "UM-MEM memory for DeepSeek Harness: scoped advisory memory, per-turn recall injection and explicit remember/amend/forget tools backed by the local um-memory CLI.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "memory",
+    "um-mem",
+    "agent-memory"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frontier-ai-next/Um-mem.git",
+    "directory": "integrations/dsh"
+  }
+}
