@@ -112,13 +112,52 @@ func (flag *scopeFlag) Set(value string) error {
 	return nil
 }
 
+const usageText = `um-memory — локальный рантайм памяти для агентов.
+
+Использование:
+  um-memory <command> --repo-root <store> --workspace <id> [--profile default] --backend <backend> [flags]
+
+Чтение:
+  health                     состояние бэкенда и проекции
+  catalog                    каталог логических блоков
+  block-map --depth N        дерево блоков
+  memory-map --output-path   статичная HTML-карта
+  recent --limit N --scope workspace|user_global --scope-id <id>
+  list-records --scope <s> --scope-id <id> [--limit N] [--cursor <c>]
+  read-record --record-id <id>
+  recall --plan-file <json>
+  explain-recall --request-file <json>
+  neighbors --record-id <id> [--depth 1..3] [--edge-types a,b] [--neighbor-limit N]
+  export-graph               записи и рёбра целиком
+
+Запись:
+  remember-candidate --request-file <json>
+  amend | forget | deprecate | rollback --request-file <json>
+  add-edge --request-file <json>          src_id, dst_id, edge_type, evidence_refs
+  promote | consolidate-observations --request-file <json>
+
+Обслуживание:
+  reconcile [--dry-run|--apply]           повтор нативных проекций
+  dashboard [--no-browser|--stop]         локальная панель
+  install-mcp --host claude|codex|hermes  регистрация MCP-сервера
+  mcp-status --host <h>
+  profile-report | operator-report | observe-runtime-cost | rebuild-indexes
+
+Все команды печатают JSON в stdout. Общие флаги: --repo-root, --workspace,
+--profile, --backend; для user_global записей нужен --user-id (в запросе поле user_id).
+`
+
 func run(ctx context.Context, args []string, output io.Writer) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+		fmt.Fprint(output, usageText)
+		return nil
+	}
 	if len(args) == 0 {
-		return errors.New("command required: dashboard, install-mcp, mcp-status, catalog, health, profile-report, rebuild-indexes, block-map, memory-map, obsidian-export, expand-block, navigation-envelope, prospective-create, prospective-get, prospective-transition, prospective-apply, prospective-candidates, prospective-intervention, prospective-telemetry, record-decision, record-usage, decision-trace, record-outcome-credit, outcome-credits, operator-report, observe-runtime-cost, explain-recall, deep-read, erase, pending-topology-evolutions, abort-topology-evolution, resume-topology-evolution, split-block, merge-blocks, observe-maintenance, add-edge, export-graph, create-block, amend-block, convert-block-to-index, protect-block, repair-protected-block-parent, archive-block, expire-due-blocks, revive-block, archive-session-block, revive-session-block, set-session-block-expiry, move-block, delete-block, forget, deprecate, rollback, amend, verification-subject, promote, consolidate-observations, commit-working-checkpoint, remember-candidate, operation-status, projection-barrier, put-root, put-successor, read-record, recall, recent, list-records or reconcile")
+		return errors.New("command required: run `um-memory --help` for the command list")
 	}
 	command := args[0]
 	switch command {
-	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "reconcile":
+	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
 	}
@@ -159,6 +198,8 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	recentBlock := flags.String("logical-block-id", "", "recent logical block filter")
 	includeCandidates := flags.Bool("include-candidates", true, "include candidate records in recent results")
 	pageCursor := flags.String("cursor", "", "record-page cursor")
+	edgeTypes := flags.String("edge-types", "", "comma-separated edge types for neighbors")
+	neighborLimit := flags.Int("neighbor-limit", 12, "neighbors result limit")
 	includeRetracted := flags.Bool("include-retracted", false, "include noncurrent record revisions in list-records")
 	mapDepth := flags.Int("depth", 1, "block-map tree depth")
 	mapIncludeMeta := flags.Bool("include-meta", false, "include protected catalog taxonomy in block-map")
@@ -879,7 +920,41 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return encoder.Encode(record)
+		// `block_id` on a stored record is the record identity, which reads as
+		// the logical block to every caller. Publish both names explicitly so a
+		// host does not have to know the internal naming.
+		raw, err := json.Marshal(record)
+		if err != nil {
+			return err
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return err
+		}
+		payload["record_id"] = record.BlockID
+		if record.BlockMembership != nil {
+			payload["logical_block_id"] = record.BlockMembership.PrimaryBlockID
+		} else {
+			payload["logical_block_id"] = ""
+		}
+		return encoder.Encode(payload)
+	case "neighbors":
+		if strings.TrimSpace(*recordID) == "" {
+			return errors.New("--record-id is required for neighbors")
+		}
+		types := make([]string, 0, 4)
+		for _, value := range strings.Split(*edgeTypes, ",") {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				types = append(types, trimmed)
+			}
+		}
+		payload, err := selected.Neighbors(ctx, engine.NeighborRequest{
+			RecordID: *recordID, Depth: *mapDepth, EdgeTypes: types, Limit: *neighborLimit,
+		})
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
 	case "recall":
 		var plan memory.RecallPlan
 		if err := readJSONFile(*planFile, &plan); err != nil {

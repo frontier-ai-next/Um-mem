@@ -248,7 +248,35 @@ export function apply(ctx, rawConfig = {}) {
         if (block) plan.logical_block_ids = [block]
         else plan.search_all = true
         const records = await runWithRequest(config, 'recall', plan)
-        return renderRecall(records, { limit })
+        const compact = compactRecords(records)
+        let text = renderRecall(records, { limit })
+        // Links were stored but nothing read them, so a connected record stayed
+        // invisible after a recall. Pull one hop for the top hits and mark it.
+        const known = new Set(compact.map((record) => record.id))
+        const linked = []
+        for (const record of compact.slice(0, 2)) {
+          if (!record.id) continue
+          try {
+            const payload = await runCli(config, ['neighbors', ...commonArgs(config), '--record-id', record.id, '--depth', '1'])
+            for (const neighbor of payload.neighbors || []) {
+              if (known.has(neighbor.record_id)) continue
+              known.add(neighbor.record_id)
+              linked.push({ ...neighbor, via: record.title })
+              if (linked.length >= 4) break
+            }
+          } catch {
+            /* a broken graph must not fail the recall itself */
+          }
+          if (linked.length >= 4) break
+        }
+        if (linked.length) {
+          text += '\n\nСвязано ребром:\n' + linked
+            .map((neighbor) => '- [' + neighbor.edge_type + '] ' + neighbor.title +
+              ' (id=' + neighbor.record_id + ', ' + neighbor.logical_block_id + ')' +
+              (neighbor.via ? ' — через «' + neighbor.via + '»' : ''))
+            .join('\n')
+        }
+        return text
       },
     },
     {
