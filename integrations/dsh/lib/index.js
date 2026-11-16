@@ -365,6 +365,7 @@ export function apply(ctx, rawConfig = {}) {
           tags: { type: 'string', description: 'Теги через запятую (опционально).' },
           block: { type: 'string', description: 'Логический блок (по умолчанию stable_project_facts).' },
           evidence_kind: { type: 'string', description: 'Откуда факт: user_statement, tool_output, file_read, agent_inference. По умолчанию agent_inference.' },
+          evidence_file: { type: 'string', description: 'Путь к файлу или id теста, который служит вторым свидетельством записи.' },
           metadata: { type: 'string', description: 'Опциональные метки записи как JSON-объект, например {"source":"repo","confidence":"high"}. Служебные ключи (status, authority, scope, retention…) зарезервированы и будут отклонены.' },
         },
         required: ['content'],
@@ -387,6 +388,14 @@ export function apply(ctx, rawConfig = {}) {
           evidence_kind: String(args.evidence_kind ?? '').trim() || 'agent_inference',
         }
         if (config.userId) payload.user_id = config.userId
+        // Provenance: the write itself is the first witness; a named file or
+        // test becomes the second. Without refs a record can only ever satisfy
+        // "the agent said so".
+        const writeRef = { ref_type: 'tool_result', ref_id: operationId(), produced_by: 'agent', producer_id: 'dsh-um-mem' }
+        const fileRef = String(args.evidence_file ?? '').trim()
+        payload.evidence_refs = fileRef
+          ? [writeRef, { ref_type: 'file_snapshot', ref_id: fileRef, produced_by: 'agent', producer_id: 'dsh-um-mem' }]
+          : [writeRef]
         const rawMeta = String(args.metadata ?? '').trim()
         if (rawMeta) {
           try {
