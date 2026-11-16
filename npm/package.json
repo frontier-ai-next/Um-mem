@@ -1,9 +1,15 @@
 {
   "name": "@um-mem/cli",
-  "version": "0.1.0",
+  "version": "0.7.0-beta.1",
   "description": "Install and run the UM-MEM memory engine",
   "bin": {
-    "um-memory": "bin/um-memory.js"
+    "um-memory": "bin/um-memory.js",
+    "um-memory-mcp": "bin/um-memory-mcp.js",
+    "um-memory-service": "bin/um-memory-service.js",
+    "um-memory-hook": "bin/um-memory-hook.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
   },
   "files": [
     "bin",
@@ -16,8 +22,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/frontier-ai-next/UM-MEM.git"
+    "url": "https://gitlab.frontierai.ru/home/frontierai/teams/mag/frontier-memory/umbrella-memory/um-mem-module.git"
   },
+  "umMemGitLabProject": "home/frontierai/teams/mag/frontier-memory/umbrella-memory/um-mem-module",
   "keywords": [
     "memory",
     "mcp",

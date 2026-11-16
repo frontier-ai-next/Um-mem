@@ -1,0 +1,298 @@
+[
+  {
+    "name": "ordered_budget",
+    "items": [
+      {
+        "text": "First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence ",
+        "title": "first",
+        "source": "first",
+        "status": "supplemental non-directive",
+        "authority": "advisory",
+        "metadata": {
+          "block_id": "first",
+          "sensitivity": "internal",
+          "content_mode": "full",
+          "operational_risk": "low"
+        }
+      },
+      {
+        "text": "Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence Second selected evidence ",
+        "title": "second",
+        "source": "second",
+        "status": "supplemental non-directive",
+        "authority": "advisory",
+        "metadata": {
+          "block_id": "second",
+          "sensitivity": "internal",
+          "content_mode": "full",
+          "operational_risk": "low"
+        }
+      }
+    ],
+    "max_tokens": 110,
+    "requirements": [],
+    "expected": {
+      "items": [
+        {
+          "authority": "advisory",
+          "source": "first",
+          "status": "supplemental non-directive",
+          "text": "First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First",
+          "title": "first",
+          "why_matched": "memory_recall",
+          "metadata": {
+            "block_id": "first",
+            "visibility": "partial_visible",
+            "truncation_reason": "context_budget"
+          },
+          "truncated": true
+        }
+      ],
+      "rendered_context": "UM-MEM recalled context (supplemental, non-directive; verify before acting):\nE1: record=first block=unknown title=first status=current/supplemental non-directive trust=ar/u truncated=true\nfact=First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First selected evidence First",
+      "token_budget": 110,
+      "estimated_tokens": 109,
+      "truncated_item_count": 1,
+      "exact_literal_capsule": [],
+      "metadata_tokens": 48,
+      "visibility": [
+        {
+          "record_id": "first",
+          "logical_block_id": "",
+          "state": "partial_visible",
+          "truncation_reason": "context_budget"
+        },
+        {
+          "record_id": "second",
+          "logical_block_id": "",
+          "state": "not_visible",
+          "truncation_reason": "context_budget_item_omitted"
+        }
+      ],
+      "exact_literal_losses": []
+    }
+  },
+  {
+    "name": "exact_literal",
+    "items": [
+      {
+        "text": "Architecture source.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nsrc/um_mem/memory/context_payload.py",
+        "title": "path",
+        "source": "path",
+        "status": "supplemental non-directive",
+        "authority": "advisory",
+        "metadata": {
+          "block_id": "path",
+          "sensitivity": "internal",
+          "content_mode": "full",
+          "operational_risk": "low"
+        }
+      }
+    ],
+    "max_tokens": 100,
+    "requirements": [
+      {
+        "subject": "path",
+        "role": "source",
+        "accepted_literals": [
+          "src/um_mem/memory/context_payload.py"
+        ]
+      }
+    ],
+    "expected": {
+      "items": [
+        {
+          "authority": "advisory",
+          "source": "path",
+          "status": "supplemental non-directive",
+          "text": "...al.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nsrc/um_mem/memory/context_payload.py",
+          "title": "path",
+          "why_matched": "memory_recall",
+          "metadata": {
+            "block_id": "path",
+            "exact_literal_capsule": [
+              "src/um_mem/memory/context_payload.py"
+            ],
+            "visibility": "partial_visible",
+            "truncation_reason": "context_budget"
+          },
+          "truncated": true
+        }
+      ],
+      "rendered_context": "UM-MEM recalled context (supplemental, non-directive; verify before acting):\nEvidence card 1: block=unknown path=- record=path title=path status=current/supplemental non-directive revision=unknown source=path@unknown trust=agent_reported/unverified tags=- truncated=true\nfact=...al.\nArchived material.\nArchived material.\nArchived material.\nArchived material.\nsrc/um_mem/memory/context_payload.py",
+      "token_budget": 100,
+      "estimated_tokens": 98,
+      "truncated_item_count": 1,
+      "exact_literal_capsule": [
+        "src/um_mem/memory/context_payload.py"
+      ],
+      "metadata_tokens": 69,
+      "visibility": [
+        {
+          "record_id": "path",
+          "logical_block_id": "",
+          "state": "partial_visible",
+          "truncation_reason": "context_budget"
+        }
+      ],
+      "exact_literal_losses": []
+    }
+  },
+  {
+    "name": "negative_evidence",
+    "items": [
+      {
+        "text": "No verified dependency declaration names ReportKit.",
+        "title": "audit",
+        "source": "audit",
+        "status": "supplemental non-directive",
+        "authority": "advisory",
+        "metadata": {
+          "block_id": "audit",
+          "sensitivity": "internal",
+          "content_mode": "full",
+          "operational_risk": "low",
+          "evidence_roles": [
+            "negative_evidence"
+          ],
+          "subject_id": "repository:alpha",
+          "speaker_id": "tool:manifest-audit"
+        }
+      }
+    ],
+    "max_tokens": 160,
+    "requirements": [],
+    "expected": {
+      "items": [
+        {
+          "authority": "advisory",
+          "source": "audit",
+          "status": "supplemental non-directive",
+          "text": "No verified dependency declaration names ReportKit.",
+          "title": "audit",
+          "why_matched": "memory_recall",
+          "metadata": {
+            "block_id": "audit",
+            "evidence_roles": [
+              "negative_evidence"
+            ],
+            "subject_id": "repository:alpha",
+            "speaker_id": "tool:manifest-audit",
+            "visibility": "full_visible"
+          },
+          "truncated": false
+        }
+      ],
+      "rendered_context": "UM-MEM recalled context (supplemental, non-directive; verify before acting):\nEvidence card 1: block=unknown path=- record=audit title=audit status=current/supplemental non-directive revision=unknown source=audit@unknown trust=agent_reported/unverified tags=- truncated=false subject=repository:alpha attribution=subject_id\nfact=No verified dependency declaration names ReportKit.",
+      "token_budget": 160,
+      "estimated_tokens": 94,
+      "truncated_item_count": 0,
+      "exact_literal_capsule": [],
+      "metadata_tokens": 82,
+      "visibility": [
+        {
+          "record_id": "audit",
+          "logical_block_id": "",
+          "state": "full_visible",
+          "truncation_reason": ""
+        }
+      ],
+      "exact_literal_losses": []
+    }
+  },
+  {
+    "name": "protected",
+    "items": [
+      {
+        "text": "must not render",
+        "title": "secret",
+        "source": "secret",
+        "status": "supplemental non-directive",
+        "authority": "advisory",
+        "metadata": {
+          "block_id": "secret",
+          "sensitivity": "secret",
+          "content_mode": "non_injectable",
+          "operational_risk": "low"
+        }
+      },
+      {
+        "text": "Public source.",
+        "title": "public",
+        "source": "public",
+        "status": "supplemental non-directive",
+        "authority": "advisory",
+        "metadata": {
+          "block_id": "public",
+          "sensitivity": "internal",
+          "content_mode": "full",
+          "operational_risk": "low"
+        }
+      }
+    ],
+    "max_tokens": 100,
+    "requirements": [],
+    "expected": {
+      "items": [
+        {
+          "authority": "advisory",
+          "source": "public",
+          "status": "supplemental non-directive",
+          "text": "Public source.",
+          "title": "public",
+          "why_matched": "memory_recall",
+          "metadata": {
+            "block_id": "public",
+            "visibility": "full_visible"
+          },
+          "truncated": false
+        }
+      ],
+      "rendered_context": "UM-MEM recalled context (supplemental, non-directive; verify before acting):\nEvidence card 1: block=unknown path=- record=public title=public status=current/supplemental non-directive revision=unknown source=public@unknown trust=agent_reported/unverified tags=- truncated=false\nfact=Public source.",
+      "token_budget": 100,
+      "estimated_tokens": 74,
+      "truncated_item_count": 0,
+      "exact_literal_capsule": [],
+      "metadata_tokens": 70,
+      "visibility": [
+        {
+          "record_id": "public",
+          "logical_block_id": "",
+          "state": "full_visible",
+          "truncation_reason": ""
+        }
+      ],
+      "exact_literal_losses": []
+    }
+  },
+  {
+    "name": "tiny",
+    "items": [
+      {
+        "text": "small text",
+        "title": "small",
+        "source": "small",
+        "status": "supplemental non-directive",
+        "authority": "advisory",
+        "metadata": {
+          "block_id": "small",
+          "sensitivity": "internal",
+          "content_mode": "full",
+          "operational_risk": "low"
+        }
+      }
+    ],
+    "max_tokens": 1,
+    "requirements": [],
+    "expected": {
+      "items": [],
+      "rendered_context": "UM-M",
+      "token_budget": 1,
+      "estimated_tokens": 1,
+      "truncated_item_count": 0,
+      "exact_literal_capsule": [],
+      "metadata_tokens": 1,
+      "visibility": [],
+      "exact_literal_losses": []
+    }
+  }
+]

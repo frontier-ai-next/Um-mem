@@ -1,177 +1,114 @@
-# Install and connect a harness
+# Install and connect a host
 
-This is the short, product-shaped path. For the low-level flags and every
-backend detail, see [Quickstart](quickstart.md) and
-[Backends](backends.md).
+UM-MEM stores scoped advisory memory in a local canonical store and one selected
+native backend. The CLI, MCP server, local service and lifecycle hooks are Go
+programs. The OpenCode plugin and the browser panel remain JavaScript/TypeScript.
 
-## Fast path (npm launcher)
+## Install the Go programs
 
-Requires Node 18+ and Python 3.12+.
+The npm launcher requires Node.js 18 or newer. A published package needs a
+matching `v<package version>` release containing verified binaries for your
+operating system and architecture:
 
 ```console
 npm install -g @um-mem/cli
 um-memory install
-um-memory setup
 ```
 
-- `um-memory install` creates an isolated Python environment in
-  `~/.um-mem/python` and installs the engine with MCP support.
-- `um-memory setup` asks for the store, backend, harness and whether to enable
-  embeddings, then writes `~/.um-mem/config.json` and updates the harness
-  settings.
-- Restart the harness after setup.
-
-`um-memory install --semantic` also installs the optional embedding runtime. The
-model itself downloads on first use.
-
-Until the npm and Python packages are published to their registries, install
-the launcher from a checkout:
+From a source checkout, install with Go 1.27 or newer. This path works before
+a matching binary release is published:
 
 ```console
-npm install -g .\npm
+cd /absolute/path/to/UM-MEM-checkout
+npm install -g ./npm
 um-memory install --from .
 ```
 
-Use the absolute checkout path instead of `.` when you run `um-memory install`
-from another folder.
+Set `UM_MEM_GO` to an absolute Go executable path if `go` is not on `PATH`.
+`um-memory install --from /path/to/release-directory` accepts a directory with
+the four platform binaries and `SHA256SUMS`. The installer checks every hash
+before activating the new version. `--force` replaces the active installation.
+`UM_MEM_HOME` selects its home (default `~/.um-mem`).
 
-## Python-only path
+To build without npm, compile `./cmd/um-memory`, `./cmd/um-memory-mcp`,
+`./cmd/um-memory-service` and `./cmd/um-memory-hook` with `go build -tags purego`.
+Place all four executables in one directory so the CLI and MCP server can start
+their sibling service. Windows executable names end in `.exe`.
 
-```console
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-python -m pip install "um-mem[mcp]"
-um-memory setup
-```
+## Choose a store and backend
 
-Add the optional embedding runtime with `"um-mem[mcp,semantic]"`.
+Use an absolute store path and a stable workspace name. Profiles separate teams
+or experiments inside a workspace; `default` is fine for one profile. Every
+command and host adapter must use the same store, workspace, profile and
+backend.
 
-For a source checkout use `python -m pip install -e ".[dev,mcp]"` and run
-`um-memory setup` from the checkout. `pipx install "um-mem[mcp]"` works too.
-
-## What `um-memory setup` asks
-
-| Question | Default | Why |
+| Backend | Go implementation | Additional requirement |
 | --- | --- | --- |
-| Store folder | `~/.um-mem/store` | All memory, indexes and caches live here. Use an existing UM-MEM store to keep your records. |
-| Workspace | `default` | A namespace inside the store, for example one per project or one per harness. |
-| Profile | `default` | A narrower namespace for experiments or teams. Usually leave it. |
-| Backend | `mnemosyne` | See the matrix below. |
-| Embeddings | on when installed | Local multilingual similarity; no API key; model downloads on first use. |
-| Harness | auto-detected | Writes the MCP entry and, where supported, hooks. |
+| `mnemosyne` | Local BEAM-compatible SQLite memory | Local disk; selected native projection must pass `health` |
+| `mempalace` | Embedded Chroma-compatible palace files | Local MiniLM model files for semantic projection |
+| `hindsight` | Native Hindsight HTTP API | A reachable Hindsight service; set `UM_MEM_HINDSIGHT_BASE_URL` and its API key if needed |
+| `zvec` | Zvec Go SDK and native library | Zvec library/model assets; the Go runtime checks their availability |
 
-Everything can be changed later by editing `~/.um-mem/config.json` or running
-`um-memory setup` again. CLI flags override the config; environment variables
-override the config but not explicit flags.
-
-## Which backend?
-
-| Backend | Choose it when | Trade-off |
-| --- | --- | --- |
-| `mnemosyne` (default) | You want local durable memory, native recall and the semantic tier. | The richest local path; keeps a projection/index next to the store. |
-| `mempalace` | You want the smallest, zero-extra-setup path or are migrating an old store. | Keyword-oriented; no native recall projection. |
-| `hindsight` | You already operate a Hindsight service and want memory there. | Needs the `hindsight` extra and a running service; not a local-first setup. |
-| `zvec` | You are evaluating an experimental vector backend. | Needs the `zvec` extra; not the default recommendation. |
-
-`um-memory setup` marks the recommended option. `um-memory doctor` checks that the
-chosen backend is actually usable before you rely on it.
-
-## Which harness?
-
-| Harness | What setup writes | Notes |
-| --- | --- | --- |
-| OpenCode | `~/.config/opencode/opencode.json` (`mcp.servers.um_mem`) | Portable tools; automatic review needs the separate native adapter. A `.bak` is kept. |
-| Claude Code | `~/.claude.json` for MCP and `~/.claude/settings.json` for hooks | Tools and a one-pass same-agent review at `Stop` when hooks run. |
-| Codex | `~/.codex/config.toml` and Codex hooks | Tools, scoped prompt read, and a one-pass same-agent review at `Stop` when hooks run. |
-| Hermes | `~/.hermes/config.yaml` | MCP tools; use the native provider for pre-round context and agent memory guidance. |
-
-Connect or reconnect later:
+Start with `mnemosyne` for a local store. The four backends are separate native
+implementations. Choosing a different backend for an existing workspace does
+not migrate its projections. Keep its selected backend and verify it before
+using the same records.
 
 ```console
-um-memory connect opencode
-um-memory connect claude codex
+um-memory health --repo-root /absolute/path/to/memory-store --workspace my-project --profile default --backend mnemosyne
 ```
 
-Connecting a tool is not the same as proving that memory grows. In a new clean
-store, test one ordinary task that produces a reusable fact, decision, or
-preference. Check that the agent saves or updates a record without a "remember"
-command, and check a second task can retrieve it. Then test a trivial turn where
-nothing should be saved. Use `um-memory status` for configuration and the atlas
-for canonical records; neither alone proves the host review callback ran.
+`native_ok: true` means the selected backend probe passed. It does not prove a
+host has loaded its hooks or that a completed task produced a memory write.
 
-The generated environment includes `UM_MEM_REPO_ROOT`, `UM_MEM_WORKSPACE`,
-`UM_MEM_PROFILE`, `UM_MEM_BACKEND` and, when enabled, the semantic model and
-cache path. Keep `um-memory-mcp` on the same Python environment that `um-memory
-doctor` checks - the setup command does that automatically.
+## Connect Codex, Claude Code or Hermes
 
-One harness setting holds one identity. To keep several repositories apart, run
-`um-memory connect --local` inside the project: it writes `./opencode.json` for
-that project only and derives the workspace from the folder name. Only OpenCode
-merges a project-local entry; the other hosts refuse `--local`. See
-[One harness, several projects](quickstart.md#one-harness-several-projects).
-
-## Embeddings: on or off?
-
-**Off** is the right default for a first install on a slow machine or a metered
-connection. UM-MEM still recalls by exact terms, identifiers, tags and the
-script-neutral Unicode n-gram fallback.
-
-**On** is worth it when:
-
-- you write memory in more than one language, or
-- you want a question phrased differently from the stored record to find it.
-
-The default model is `intfloat/multilingual-e5-large` (about 2.1 GB on first
-use, CPU only). It is loaded lazily and released after a period of inactivity.
-Change it with `um-memory setup` or:
+The MCP installer writes the Go server entry to the host's configuration:
 
 ```console
-um-memory setup --semantic --model intfloat/multilingual-e5-small
+um-memory install-mcp --host codex --repo-root /absolute/path/to/memory-store --workspace my-project --profile default --backend mnemosyne
+um-memory mcp-status --host codex
 ```
 
-Turning it off later does not delete existing records or the index; it only
-stops semantic reordering.
+Use `--host claude` or `--host hermes` for the other supported hosts. The
+installer preserves unrelated entries and refuses to overwrite an unmanaged
+entry with the same server name. A configured MCP server exposes tools; it does
+not by itself capture prompt or work-boundary events.
 
-## Everyday commands
+Install the Go lifecycle hook separately in the project or Hermes home:
 
 ```console
-um-memory status        # what is configured right now
-um-memory doctor        # Python, store, backend and MCP checks
-um-memory map           # render and open the memory map
-um-memory map --no-open # write the file only
-um-memory connect ...   # refresh harness settings
+um-memory-hook --install --host codex --repo-root /absolute/path/to/memory-store --workspace my-project --profile default --backend mnemosyne --project-dir /absolute/path/to/project
+um-memory-hook --status --host codex --project-dir /absolute/path/to/project
 ```
 
-`um-memory map` uses the configured store, workspace and backend, so the old
-invocation with three explicit flags is no longer necessary:
+Use `--host claude` for a Claude Code project. For `--host hermes`, pass the
+Hermes configuration home as `--project-dir`; the hook installer adds external
+Go shell hooks to `config.yaml`. Restart the host after changing its settings.
 
-```console
-um-memory map --output .\memory-map.html
-```
+The optional OpenCode V2 plugin in `integrations/opencode/README.md` is installed
+separately. Its TypeScript adapter needs an absolute path to the Go
+`um-memory-mcp` executable and explicit store, workspace, profile and backend
+arguments. Do not load a second `um_mem` MCP entry alongside that plugin.
+
+## Verify a real host journey
+
+Use a fresh test workspace. Ask the host to complete a task that reveals one
+reusable fact or decision, then inspect records with `um-memory list-records`
+and ask a later session to recall it. Also complete a trivial task that should
+save nothing. `mcp-status` confirms configuration only; it cannot attest that a
+host ran a hook. A failed native probe or missing selected backend must remain
+visible instead of falling back to the sidecar.
+
+The live panel opens with `um-memory dashboard --repo-root ... --workspace ...
+--backend ...`. Use `--no-browser` to print its URL, or `--stop` to stop its
+frontend capability. `um-memory memory-map` writes a static map to a path chosen
+with `--output-path`.
 
 ## Keep an existing store
 
-Point setup at the old store:
-
-```console
-um-memory setup --store "C:\path\to\store" --workspace opencode --backend mnemosyne
-```
-
-The store is not copied or rewritten. The backend and workspace must match the
-records you want to see; the map reads the same store. Run `um-memory doctor`
-afterwards, then `um-memory map`.
-
-## Troubleshooting
-
-- **`um-memory` is not found** - reopen the terminal after `npm install -g`, or
-  run `um-memory install` from the npm package.
-- **`fastembed is not installed`** — reinstall with
-  `um-memory install --semantic` or `python -m pip install "um-mem[semantic]"`.
-- **The model download is slow** — embeddings are optional; run
-  `um-memory setup --no-semantic`, or pre-fetch with `um-memory semantic-model`.
-- **The harness shows no tools** — run `um-memory connect <harness>` and restart
-  the harness. Check that the path in the MCP entry is the environment from
-  `um-memory status`.
-- **The map is empty** — confirm the store, workspace and backend with
-  `um-memory status`; a different workspace is a different namespace, and a
-  different backend can show a different projection.
+Pass the existing absolute store path and its original workspace, profile and
+backend to the Go commands. The Go store reads the existing canonical SQLite
+format and native partitions. Run `health` and `reconcile --dry-run` before
+allowing new writes. Take an ordinary backup of the store before a production
+cutover, and verify write, amend, recall and retract on a copy first.

@@ -36,8 +36,8 @@ other, so they return the same creation receipt without duplicating a record.
 
 Publication requires `expected_source_revision_id` and a verifier-owned
 `candidate_semantic_verification` report. Hosts obtain the exact typed subject
-with `MemoryClient.verification_subject`, then persist an independent review
-with `append_candidate_semantic_verification_ledger_event`. The subject binds
+with the Go client's `VerificationSubject`, then persist an independent review
+in the verifier ledger. The subject binds
 the full candidate payload, profile, revision, source evidence and requested
 publication target. Generic test receipts remain supporting evidence. Candidate
 creation and editing stay unverified and do not require a review.
@@ -71,14 +71,16 @@ tags, typed metadata, lifecycle state, token budget, and integer revision. An
 index block navigates to children. A leaf can own records and maps to a native
 backend partition.
 
-Operational health is attached to the leaf: record and write counts, scoped
-and broad recall counts, hits and zero-hits, failures, latency observations,
-rendered tokens, lifecycle counters, and partition health. These numbers inform
-the agent; they do not trigger topology changes by themselves.
+Leaf health carries recorded write and recall counts, native search hits and
+failures, latency, bytes, and current record counts for the selected physical
+partitions. Navigation reads these stored observations with `not_probed`
+readiness; it does not test current provider availability. Counters for
+operations without an emitter remain zero. These numbers inform the agent;
+they do not trigger topology changes by themselves.
 
 ### Record
 
-A trusted host can call `MemoryClient.register_source` with an exact source ID,
+A trusted host can call the Go client's `RegisterSource` with an exact source ID,
 UTF-8 text, producer, and optional speaker/time fields. The source is retained
 as a hidden raw witness in the bound workspace/profile/session. Repeating the
 same event returns its existing witness ID; changing its bytes or scope is a
@@ -149,8 +151,8 @@ The barrier reads only the named record's outbox state until the deadline. It
 does not start store-wide reconciliation or native work. A different commit
 revision reports `projection_revision_mismatch`; a pending projection at the
 deadline reports `projection_deadline_exceeded`. Recovery is a separate action.
-Python callers can inspect a creation by its original `operation_id` with
-`MemoryClient.operation_status`, which returns the immutable creation receipt
+Go callers can inspect a creation by its original `operation_id` with
+`Client.OperationStatus`, which returns the immutable creation receipt
 and a separate current projection status. If the separate caller response was
 lost, status verifies the canonical creation receipt and exact profile before
 reporting `receipt_recovery=canonical_creation_receipt`; it cannot reproduce the
@@ -158,12 +160,11 @@ lost response body. `commit_revision` names the durable outbox entry, while
 `projection_revision` is zero until that entry is actually projected.
 `read_exact_records` reads a bounded
 batch of canonical record IDs in the requested order.
-MCP, local-service, and Hermes tools expose these exact reads, operation status,
+MCP and local-service tools expose these exact reads, operation status,
 and the projection barrier. Local-service status reads the original receipt in
 the authenticated caller role; callers cannot select another role. The MCP
 `remember` tool accepts `write_mode`, exact `source_segments`, and `operation_id`
-as explicit arguments. Hermes uses the native tool-call identity when the model
-does not supply an `operation_id`. MCP generates and returns one when omitted;
+as explicit arguments. MCP generates and returns an `operation_id` when omitted;
 the returned ID can be passed to `operation_status` under the same caller role.
 `list_records` takes an explicit semantic scope and scope ID, with an optional
 logical block ID and a 1–128 item page limit. Its opaque cursor freezes up to
@@ -218,11 +219,10 @@ With `repo_root=/memory` and `workspace_id=alpha`, the backend data lives below
 local SQLite data; the selected backend stores its native partitions beside
 that workspace data or at its explicitly configured service/data location.
 
-Generated Hermes provider/observer wrappers, manifests, and profile config live
-inside the selected Hermes profile, under `<HERMES_HOME>/plugins/` and
-`<HERMES_HOME>/um-mem/`. Legacy cutover backups, when present from older
-installations, remain there for explicit restore.
-They are not source files and must not be committed to this repository.
+The Go Hermes hook installer writes managed external hook entries to the
+selected Hermes profile's `config.yaml`. It preserves unrelated settings.
+Generated profile state is local to the host and must not be committed to
+this repository.
 
 ## Version boundary
 
@@ -235,7 +235,7 @@ read. Keep any older store separate rather than pointing this release at it.
 
 ## Publication assurance
 
-`MemoryClient.promote` requires a passed dedicated candidate semantic verification
+The Go client's `Promote` requires a passed dedicated candidate semantic verification
 receipt for the exact source revision, payload, source evidence, destination leaf,
 authority and scope. A generic test report or a host-declared assurance label does
 not establish semantic review. The receipt identifies independent proposer and

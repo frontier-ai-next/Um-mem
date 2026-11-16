@@ -1,98 +1,66 @@
 # Troubleshooting
 
-Start with the integration status and native backend health. Do not delete a
-store or loosen identity checks until the failing layer is known.
+Start with the exact store, workspace, profile, backend, and host settings used
+by the failing session. Keep the store intact while identifying the layer that
+failed.
 
-## MCP tools work, but active context is not automatic
+## MCP tools are missing
 
-MCP alone exposes `set_active_mask` and `resolve_active_mask`; it does not
-deliver context or make memory decisions on behalf of the host. Codex's
-`UserPromptSubmit` hook can supply bounded project context at the prompt
-boundary, and its `Stop` hook can ask the same agent for one memory review.
-Neither hook runs before every internal model request. Claude Code has a
-one-pass same-agent review at `Stop`, but no prompt-time context injection here. Hermes'
-native provider has a pre-round `prefetch` lifecycle. Verify the host actually
-runs installed hooks; a settings file or MCP health response is not proof.
+Run `um-memory mcp-status --host codex` (or `claude` or `hermes`) and inspect
+the host's own MCP listing after a restart. The status command reads saved
+configuration; it does not prove that the host launched the server. The Go
+`um-memory-mcp` program requires `--repo-root`, `--workspace`, `--profile`, and
+`--backend`. Keep it beside `um-memory-service` so local service startup works.
 
-## Hermes provider is staged but inactive
+## Tools work, but context is not automatic
 
-Run the status command, then complete setup in Hermes:
+MCP exposes explicit `recall`, `build_context`, and active-mask tools. It does
+not inject context on every model request. Install the Go host hook separately
+with `um-memory-hook --install`, restart the host, and check its native hook
+status. Codex can receive bounded context at a prompt boundary; review hooks
+can ask the same agent whether completed work produced a durable fact. A
+correct no-write decision leaves the record count unchanged.
 
-```console
-um-memory hermes-provider-status --json --hermes-home "C:/path/to/hermes-profile" --hermes-python "C:/path/to/hermes-agent/venv/Scripts/python.exe"
-hermes memory setup
-hermes memory status
-```
+## Hermes integration is inactive
 
-The UM-MEM installer stages files and declared dependencies only. Hermes must
-prepare those dependencies through its package manager and select `um-mem`.
-Restart Hermes after preparation. Check `staged`, `active`, and
-`runtime_import.importable` independently; `live_callback_proven` remains false
-until a live provider receipt is observed. Common causes are:
+Hermes runs the Go external shell hooks and Go MCP server. Check
+`um-memory-hook --status --host hermes --project-dir /absolute/path/to/hermes-home`
+and `um-memory mcp-status --host hermes`, then run a real Hermes hook or prompt.
+Confirm that both the external hook and Go MCP entry appear in Hermes' active
+configuration; each supplies a different part of the integration.
 
-- missing or incomplete `<HERMES_HOME>/um_mem/config.json`;
-- missing provider manifest or dependency preparation;
-- wrong `--hermes-python` (it must be Hermes' own interpreter);
-- UM-MEM source root is not the repository containing `src/um_mem`;
-- provider or observer wrapper missing from the selected profile;
-- `memory.provider` not set to `um-mem` after Hermes setup.
-
-The supported install leaves Hermes built-in memory and its notes untouched.
-The old `--replacement` hard-cutover option is rejected; older profiles changed
-by that option can still use `hermes-provider-restore` if their backup manifest
-is intact.
-
-## Hermes cannot import UM-MEM
-
-Confirm that `python_executable` in the profile config exists and can run:
+## Native backend is unavailable
 
 ```console
-C:/path/to/python.exe -c "import um-mem; print(um_mem.__version__)"
+um-memory health --repo-root /absolute/path/to/store --workspace alpha --profile default --backend mnemosyne
+um-memory reconcile --repo-root /absolute/path/to/store --workspace alpha --profile default --backend mnemosyne --dry-run
 ```
 
-For a source checkout, `code_root` must point to the repository directory that
-contains `src/um_mem`. For an installed wheel, omit `code_root` and install the
-same UM-MEM version into the Python environment Hermes uses.
+Check the selected provider's service or model path and pending projections.
+Use `reconcile --apply` only after understanding the dry-run report. A passing
+canonical SQLite read does not establish native health.
 
-## Active status is `none`
+## Recall returns no records
 
-No live mask exists for the current session/task scope. This is not an error.
-Navigate the tree and use temporary recall, or explicitly set a mask if some
-context should remain available on later rounds.
+Check the workspace and profile, then the requested logical leaf or exact
+record ID. Confirm that the record is current and that candidate visibility,
+run ID, scope chain, temporal filters, token budget, and native partition all
+permit the read. A managed MCP server without a host session ID generates one
+for its own lifetime; a new server process has a different session. Use a
+stable trusted host session ID when cross-process candidate continuity is
+required. `search_all` is an explicit diagnostic or agent choice, not a
+permanent substitute for block navigation.
 
-## Active status is `unavailable`
+## Active mask says `none` or `unavailable`
 
-The provider could not resolve the mask. Continue the host task and inspect the
-lease/service diagnostics. Likely causes include backend downtime, catalog
-revision mismatch, an inactive selected block, invalid scope, or service
-timeout. Fix the cause or amend the mask explicitly; do not perform hidden
-global recall as a substitute.
+`none` means no mask is selected for this exact session and task. Navigate the
+tree or use temporary recall. `unavailable` means the selected mask cannot be
+materialized; inspect the lease and service diagnostics for a stale catalog
+revision, inactive block, scope mismatch, backend failure, or timeout. Amend
+the mask explicitly after fixing the cause.
 
-## `native_projection_rebuild_required`
+## Existing Mnemosyne database needs rebuilding
 
-The selected partition was written by an incompatible projection version or no
-longer matches its declared native identity. Use a separate clean store; this
-release has no old-store conversion command. Do not replace scoped native
-recall with a shared-store scan followed by metadata filtering.
-
-## Recall returns nothing
-
-Check, in order:
-
-1. the selected leaf IDs are current and writable leaves;
-2. the record belongs to the same workspace and profile;
-3. candidate visibility matches `include_candidates`;
-4. lifecycle and temporal filters permit the record;
-5. the native partition is healthy and contains the record;
-6. token and result limits are non-zero.
-
-Use `um-memory explain-recall` to see exclusions. Use `search_all` only as an
-explicit diagnostic or agent decision, not as a permanent routing shortcut.
-
-## Restore refuses to overwrite the Hermes profile
-
-The profile's `config.yaml` changed after replacement. Restore is deliberately
-non-destructive in this case. Stop Hermes, compare the current config with the
-installer backup named by `<HERMES_HOME>/um_mem/replacement.json`, preserve the
-new operator changes, and resolve the file manually. Do not delete the manifest
-until the profile has been recovered and verified.
+A legacy shared native database can be incompatible with per-leaf partitioning.
+The Go runtime preserves it and reports a rebuild requirement. Qualify any
+reprojection on a copied store before changing a production workspace.

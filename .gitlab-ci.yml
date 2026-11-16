@@ -1,0 +1,78 @@
+stages:
+  - build
+  - test
+  - release
+
+go-verify:
+  stage: build
+  image: golang:1.27.3-trixie
+  script:
+    - go test ./...
+    - go test -tags purego ./...
+    - go vet ./...
+    - mkdir -p dist
+    - |
+      for name in um-memory um-memory-mcp um-memory-service um-memory-hook; do
+        CGO_ENABLED=0 go build -tags purego -trimpath -o "dist/$name" "./cmd/$name"
+      done
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
+
+node-integrations:
+  stage: test
+  image: node:20-bookworm
+  needs:
+    - job: go-verify
+      artifacts: true
+  script:
+    - npm test --prefix npm
+    - npm ci --prefix integrations/opencode
+    - UM_MEM_SMOKE_GO_BIN_DIR="$CI_PROJECT_DIR/dist" npm test --prefix integrations/opencode
+
+go-release-assets:
+  stage: build
+  image: golang:1.27.3-trixie
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - |
+      version="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' npm/package.json | head -n 1)"
+      test -n "$version" && test "$CI_COMMIT_TAG" = "v$version"
+    - mkdir -p dist
+    - |
+      for system in linux darwin windows; do
+        for architecture in amd64 arm64; do
+          suffix=""
+          if [ "$system" = windows ]; then suffix=".exe"; fi
+          for name in um-memory um-memory-mcp um-memory-service um-memory-hook; do
+            CGO_ENABLED=0 GOOS="$system" GOARCH="$architecture" go build \
+              -tags purego -trimpath -ldflags='-s -w' \
+              -o "dist/${name}-${system}-${architecture}${suffix}" "./cmd/$name"
+          done
+        done
+      done
+    - cd dist && sha256sum um-memory-* > SHA256SUMS && sha256sum --check SHA256SUMS
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
+
+publish-go-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  variables:
+    GLAB_ENABLE_CI_AUTOLOGIN: "true"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  needs:
+    - job: go-release-assets
+      artifacts: true
+    - job: node-integrations
+  script:
+    - |
+      glab release create "$CI_COMMIT_TAG" dist/* \
+        --use-package-registry --package-name um-mem-go \
+        --name "UM-MEM $CI_COMMIT_TAG" \
+        --notes "Verified Go binaries and SHA-256 manifest for $CI_COMMIT_TAG."

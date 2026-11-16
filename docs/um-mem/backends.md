@@ -1,168 +1,79 @@
-# Backends
+# Native backends
 
-UM-MEM selects one durable backend for a configured workspace runtime. The
-semantic tree and contracts stay the same; each backend provides a different
-native partition primitive and operating model.
-Hindsight and Mnemosyne batch writes may use temporary workers for distinct leaves;
-their worker-owned SQLite connections close when each worker finishes.
-Backend close waits for active partition projection calls before closing native
-SDK resources and SQLite connections. Work not yet started remains durable in
-the outbox for reopening; closing is not a claim that the entire outbox drained.
+One runtime selects one native backend for its workspace and profile. The
+canonical SQLite journal holds records, revisions, receipts, and the projection
+outbox. Native recall reads the selected backend's leaf partition. If it is
+unavailable or a projection is pending, UM-MEM reports that state instead of
+claiming a successful sidecar recall.
 
-## Comparison
-
-| Backend | Good fit | Native leaf partition | External service |
-| --- | --- | --- | --- |
-| MemPalace | Local development and self-contained profiles | Chroma collection family | No |
-| Hindsight | Service-backed retain/recall and Hindsight deployments | Hindsight bank | Usually |
-| Mnemosyne | Local Mnemosyne/BEAM storage | Separate database and native session per leaf | No |
-| Zvec | Embedded dense and full-text search | Separate Zvec collection per leaf | No |
-
-Mnemosyne's native session identifier belongs to a semantic leaf, rather than
-to a Hermes session. Its database also isolates that leaf before native top-k
-retrieval.
-
-## MemPalace
-
-MemPalace is installed with the base package and is the default for the Python
-and MCP interfaces:
-
-```console
-set UM_MEM_BACKEND=mempalace
-um-memory backend-health --repo-root ./agent-memory --workspace alpha --backend mempalace --json
-```
-
-Data is stored under the workspace's `.memory/mempalace` area. Each logical
-leaf has a native collection-family identity. A new leaf is materialized on its
-first eligible write.
-
-## Hindsight
-
-Install the client extra:
-
-```console
-python -m pip install "um-mem[hindsight]"
-```
-
-Configure the runtime:
-
-| Variable | Default | Meaning |
+| Backend | Native leaf partition | External service |
 | --- | --- | --- |
-| `UM_MEM_HINDSIGHT_BASE_URL` | `http://localhost:8888` | Service URL |
-| `UM_MEM_HINDSIGHT_API_KEY` | empty | Service credential |
-| `UM_MEM_HINDSIGHT_TIMEOUT_SECONDS` | `30` | Client timeout |
-| `UM_MEM_HINDSIGHT_EMBEDDED` | `0` | Use embedded mode when supported |
-| `UM_MEM_HINDSIGHT_PROFILE` | `um-mem-dev` | Hindsight profile |
-| `UM_MEM_HINDSIGHT_RETAIN_ASYNC` | `0` | Asynchronous retention |
-| `UM_MEM_HINDSIGHT_FAIL_CLOSED` | `1` | Refuse native-unhealthy operation |
+| `mnemosyne` | BEAM-compatible SQLite database and session per leaf | No |
+| `mempalace` | Chroma-compatible collection family | No |
+| `hindsight` | Hindsight bank | Yes |
+| `zvec` | Zvec collection | No |
 
-Each UM-MEM leaf maps to its own Hindsight bank. Health is native only when the
-configured service and retain/recall surface are available. The sidecar index
-does not masquerade as a healthy Hindsight recall path.
-Semantic leaf banks use the native extraction defaults, without imposing a
-technical workspace or BKB mission on model-authored topics.
+All four implementations are in Go. Build with `go build -tags purego` or use
+the Go binaries installed by `@um-mem/cli`. Check the selected provider before
+starting a host session:
+
+```console
+um-memory health --repo-root /absolute/path/to/store --workspace alpha --profile default --backend mnemosyne
+```
+
+The same absolute store path, workspace, profile, and backend must be used by
+the CLI, MCP server, service, and hooks.
 
 ## Mnemosyne
 
-Mnemosyne support is installed with the base package. Select it with:
+Mnemosyne is a local starting point. Each logical leaf receives a stable
+native partition derived from its workspace, block, and backend partition key.
+Its database lives below the workspace's native `partitions/` directory, so
+FTS ranking stays inside that leaf. Native rows are verified against current
+canonical projections before they can enter semantic recall; historical rows
+left after correction do not displace current results.
 
-```console
-set UM_MEM_BACKEND=mnemosyne
-```
+A legacy shared `mnemosyne.db` in the native data directory is preserved and
+reported as requiring a projection rebuild. UM-MEM does not silently convert
+or discard it. Use a copy of an existing store when qualifying a migration.
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `UM_MEM_MNEMOSYNE_ENABLED` | `1` | Enable native Mnemosyne access |
-| `UM_MEM_MNEMOSYNE_DATA_DIR` | workspace `.memory/mnemosyne` | Native data directory |
+## MemPalace
 
-Each leaf receives a stable native session-partition identifier derived from
-its workspace, block ID, and stable backend partition key. A separate native
-database lives under `partitions/<partition-identity-sha256>/mnemosyne.db`.
-Native FTS and dense retrieval therefore rank only that partition's records.
-UM-MEM also maintains its typed sidecar index for contracts and audit operations;
-semantic recall remains a native Mnemosyne operation. Discovery of existing
-leaf partitions uses indexed canonical memberships instead of loading every
-record in the store.
+MemPalace uses local collection families and a MiniLM model. Set
+`UM_MEM_MINILM_MODEL_DIR` to the model files or pass `--minilm-model-dir` to
+the Go CLI or MCP server. A new logical leaf is materialized when its first
+eligible record is projected. Long canonical content is retained in full;
+embedding input and source windows are bounded separately. Physical erase is
+implemented for this backend and verified by exact canonical ID.
 
-All four native backends support staged split/merge projection into new leaf
-partitions. Each staged copy preserves the exact canonical record and is verified
-before the catalog switches membership. A failed native stage leaves the source
-leaf readable and the generation pending for a bounded retry; the sidecar is
-never used to claim successful native recall. Hindsight requires a healthy
-retain/get/recall service for this operation.
+The bundled Linux amd64 Chroma shim currently requires glibc 2.38 or newer.
+The full Go test suite therefore runs on Debian Trixie in CI. Debian Bookworm
+can build the Go commands and run Mnemosyne, but its glibc 2.36 cannot load
+that Chroma shim, including with `-tags purego`.
 
-An empty `retain_blocks([])` batch returns zero writes without opening a native
-partition or starting batch workers.
+## Hindsight
 
-An older shared `mnemosyne.db` directly in the native data directory reports
-`native_projection_rebuild_required` and refuses native access. Its history is
-preserved. Use a clean store for a fresh run; existing deployments require an
-explicit reconstruction of native projections from their retained canonical
-history. UM-MEM does not silently discard or reinterpret the shared database.
+Configure `UM_MEM_HINDSIGHT_BASE_URL` and, when required,
+`UM_MEM_HINDSIGHT_API_KEY`; the CLI and MCP server also accept `--base-url`.
+Each leaf maps to a Hindsight bank. Health requires the configured service's
+native operations to be available. The Go runtime does not replace a failed
+service read with a canonical SQLite search.
 
 ## Zvec
 
-Install the optional embedded backend with `python -m pip install "um-mem[zvec]"`
-and select `UM_MEM_BACKEND=zvec`. Zvec 0.7 provides a separate collection for
-each leaf. Canonical records, receipts, and the projection outbox remain in
-UM-MEM's SQLite store. Native indexing uses overlapping source windows with
-exact offsets; neither the windows nor their embeddings replace the full
-canonical record. Projection fetches, embeds, writes and verifies at most 256
-windows per batch, below Zvec's 1024-document write limit. A retry verifies
-already written windows and continues with missing ones; it does not create new
-records or truncate long sources. The outbox commits only after all batches
-have been verified. Windows never become independent semantic facts. The full
-source remains available by exact record ID. Dense and native full-text
-retrieval operate only on the selected leaf collections. A pending or failed
-native projection is reported as such, rather than silently treated as an
-empty memory. Zvec's embedded index has no external server to start.
+Zvec uses its native Go library and a separate collection per logical leaf.
+Set `UM_MEM_ZVEC_MODEL_DIR` or pass `--zvec-model-dir` for the required model
+assets. Projection divides long sources into overlapping windows with exact
+offsets, writes bounded batches, and verifies them before the outbox commit.
+Those windows are retrieval aids, not independent memory facts. Exact record
+reads still return the complete canonical content.
 
-## Semantic tier (optional)
+## Topology and recovery
 
-The backend decides how records are stored and searched. On top of it UM-MEM
-can run one local retrieval tier that scores the newest records with
-multilingual sentence embeddings, so a question written in one script reaches
-a record written in another script. Install it with
-`python -m pip install "um-mem[semantic]"`; the default install never
-downloads a model.
-
-| Variable | Meaning |
-| --- | --- |
-| `UM_MEM_SEMANTIC` | `0` switches the tier off. Default is on when the extra is installed. |
-| `UM_MEM_SEMANTIC_MODEL` | Model id. Default `intfloat/multilingual-e5-large`. |
-| `UM_MEM_SEMANTIC_CACHE_DIR` | Where the model files live. Default `<um-mem home>/cache/fastembed`. |
-| `UM_MEM_SEMANTIC_FLOOR` | Minimum similarity that counts as a hit. Default is chosen per model. |
-| `UM_MEM_SEMANTIC_WARMUP` | `0` defers the model load to the first question instead of warming it in the background at service start. |
-
-The tier runs in the local service, so the model is loaded once per service
-process and stays warm for the MCP tools and the pre-tool helper alike. It
-only reorders candidates: the stored record text remains the evidence, and a
-question with no real match returns nothing instead of a plausible-looking
-record. Prefetch the model with `um-memory semantic-model` instead of waiting
-for the first question.
-
-The model is a few gigabytes of resident memory, and it is only useful while
-a question is being scored. An unused model is released after
-`UM_MEM_SEMANTIC_IDLE_SECONDS` (default 120 seconds) and loaded again on the
-next question. The native backend stays keyword-only, so no second model is
-ever loaded or downloaded; ask for native dense recall explicitly with
-`MNEMOSYNE_EMBEDDING_MODEL` if you want it.
-
-The index covers the whole workspace: every write joins it in the background and
-`um-memory semantic-index` backfills what is missing, so a question in any script
-reaches old records and not only the newest window. Stored procedures are
-records of kind `procedure`; `um-memory map` renders the workspace as one
-self-contained HTML page for a human look.
-
-## Switching backends
-
-Changing `UM_MEM_BACKEND` does not move existing records. Start a separate
-clean store for the new backend; this release has no old-store conversion
-command. Do not point a new backend at old projections and rely on fallback
-filtering.
-
-Always check health before starting a long session:
-
-```console
-um-memory backend-health --repo-root ./agent-memory --workspace alpha --backend mempalace --json
-```
+Split and merge operations stage native copies in target leaves before
+publishing new membership. A failed stage keeps the source readable and the
+generation pending for recovery. Use `pending-topology-evolutions`,
+`resume-topology-evolution`, and `reconcile --dry-run` to inspect state before
+retrying pending work. A different backend does not inherit old native
+projections; switching backends requires a deliberate migration or a clean
+store.

@@ -40,7 +40,7 @@ Workspace is the physical isolation boundary, including for `project:` scope:
 Only `user_global` blocks may declare `isolation_policy.cross_workspace: true`.
 The store-level manager identity (`um-mem-manager`) maps its backend, catalog
 and semantic index to `.UM-MEM/memory/`. A workspace client reads that store
-only with explicit `include_manager=True` in the Python recall/context API.
+only with an explicit manager read in the Go recall/context API.
 The cross-workspace view requires a bound matching `user_id`, a user-global
 scope and a manager block whose isolation policy opts in; manager-local
 workspace and project records never cross. These hits follow workspace hits
@@ -137,15 +137,14 @@ Expansion uses `block_health` for only the selected node and visible child page.
 It reads persisted native-partition identities and observations without probing a
 provider or enumerating unrelated partitions. `diagnostics_status=not_probed` and
 `metrics_scope=native_partition` distinguish these observations from current
-backend readiness; explicit `health`/preflight operations retain that role. A
-custom backend without this operation reports `unsupported`. Partition counters
+backend readiness; explicit `health`/preflight operations retain that role. Partition counters
 describe the physical partition, not causal usefulness or per-user outcome credit.
 Scoped current-record counts use both the profile and stable physical key,
 including published membership overrides after split/merge. Historical physical
 partitions may coexist within a leaf: their observations remain visible, while
 superseded records do not inflate current counts. Event observations span catalog
-revisions of the same physical identity. Identity/key pairs are validated using
-the owning backend's constructor before deduplication or profile admission.
+revisions of the same physical identity. The owning Go backend derives each
+identity from the persisted key after profile-scoped membership selection.
 The internal materialized leaf descriptor keeps exact current-record counts from indexed SQLite
 membership rows and at most 64 record/revision IDs as a diagnostic preview. Its
 `record_ids_truncated` flag marks a larger leaf; exact record lookup and paginated
@@ -191,8 +190,8 @@ current context; it does not rewrite or erase its accepted bytes. Promotion pres
 the candidate's exact dependencies in the same canonical commit. A correction is a
 new authored revision and must declare its own changed derivation links.
 
-Hosts can call `MemoryClient.validate_dependencies(record_id, as_of=..., max_nodes=...,
-max_edges=...)` for a content-free `DependencyValidation` receipt: `valid`, `invalidated`
+Hosts can call `Client.ValidateDependencies(ctx, recordID, DependencyOptions{AsOf: ...,
+MaxNodes: ..., MaxEdges: ...})` for a content-free `DependencyValidation` receipt: `valid`, `invalidated`
 or `incomplete`, checked record IDs and exact issue codes. The defaults bound each
 traversal to 256 nodes and 1024 edges; incomplete traversal grants no current-context
 eligibility. An explicit historical `as_of` checks source validity at that instant;

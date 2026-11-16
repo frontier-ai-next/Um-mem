@@ -8,7 +8,7 @@ transcript, infer which records to activate, or start a reflection model.
 ## Install from this checkout
 
 Requires Node 20+, OpenCode V2 with `@opencode/plugin` 2.1.3-compatible hooks,
-and an installed UM-MEM Python environment with the `mcp` extra.
+and the UM-MEM Go binaries (`um-memory-mcp` beside `um-memory-service`).
 
 ```console
 cd integrations/opencode
@@ -17,7 +17,7 @@ npm run build
 ```
 
 Add this plugin to the appropriate OpenCode configuration. Set absolute paths
-to your Python executable, plugin directory and existing UM-MEM store:
+to the Go MCP executable, plugin directory and existing UM-MEM store:
 
 ```jsonc
 {
@@ -25,7 +25,7 @@ to your Python executable, plugin directory and existing UM-MEM store:
   "plugins": [{
     "package": "/absolute/path/to/UM-MEM/integrations/opencode",
     "options": {
-      "command": ["/absolute/path/to/python", "-m", "um_mem.memory.mcp_server"],
+      "command": ["/absolute/path/to/um-memory-mcp", "--repo-root", "/absolute/path/to/memory-store", "--workspace", "my-project", "--profile", "default", "--backend", "mnemosyne"],
       "env": {
         "UM_MEM_REPO_ROOT": "/absolute/path/to/memory-store",
         "UM_MEM_WORKSPACE": "my-project",
@@ -103,11 +103,14 @@ This type-checks against the published V2 plugin API and tests the registered
 hook with real MCP transports: two sessions, correction between rounds,
 deactivation, empty focus and advisory failure.
 
-For a native-backend smoke, set `UM_MEM_SMOKE_PYTHON` to an installed UM-MEM Python
-executable and run `npm test`. The smoke creates an isolated temporary store,
+For a native-backend smoke, set `UM_MEM_SMOKE_GO` to a Go 1.27+ executable
+and run `npm test`. The smoke builds the Go CLI, MCP server and service in an
+isolated temporary directory, then creates a temporary store,
   requires `selected_native` Mnemosyne, tests pagination, write/recall, focus
   switching, correction, hypothesis retraction and cross-session isolation,
-then shuts down its listener and removes only its own temporary store.
+then lets its listener shut down and removes only its own temporary directory.
+CI may instead set `UM_MEM_SMOKE_GO_BIN_DIR` to a directory containing those
+three prebuilt binaries.
 
 The loader test uses OpenCode's `Host.resolve` to check the root `index.js`
 entrypoint as well as the built module. On 2026-10-23, a separate live smoke in

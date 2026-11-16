@@ -6,7 +6,7 @@
 .memory_bench_cache/
 .mrt/
 .venv/
-data/
+/data/
 venv/
 __pycache__/
 *.py[cod]

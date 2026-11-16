@@ -216,12 +216,12 @@ backend.
 
 ## Code discipline
 
-- Target Python 3.12+ and use its native typing syntax. Do not add compatibility
-  imports such as `from __future__ import annotations`.
+- Target the Go version declared in `go.mod`. Keep the CLI, MCP server,
+  service, and hooks on the same contracts.
 - Prefer existing typed objects and direct control flow over generic helpers,
   reflection, broad exception handling, or stringly typed dispatch.
-- Keep imports at module scope unless an optional dependency or host-only
-  integration requires a local import.
+- Keep imports explicit and package boundaries narrow. Use context and typed
+  errors at external boundaries.
 - Reject unknown fields at trust boundaries. Do not silently coerce malformed
   identity, revisions, or lifecycle values.
 - Do not read credentials from repository files or expose record bodies in
@@ -245,11 +245,11 @@ Before accepting a change, ask:
 - Does backend recall remain native to the selected leaf partition?
 - Does the documentation describe what the code actually does?
 
-Run focused tests first, then the full suite and strict documentation build:
+Run focused tests first, then the full Go suite and vet checks:
 
 ```console
-python -m pytest -q
-mkdocs build --strict
+go test ./...
+go vet ./...
 ```
 
 ## Creation and independent verification
@@ -266,7 +266,7 @@ request and scope must match its atomically committed receipt.
 ## Lossless atomic writes and projection barriers
 
 The trusted host can register exact source text with
-`MemoryClient.register_source(source_id=..., text=..., producer_id=...)`.
+the Go client's `RegisterSource` with an exact source ID, text, and producer ID.
 Registration retains a hidden raw witness with source hash, event identity,
 session scope and optional speaker/time provenance. It does not choose a
 semantic leaf; the model still makes that placement explicitly.
@@ -277,8 +277,8 @@ scope. `source_coverage(expected_source_ids)` unions overlapping ranges across
 records and reports byte and source-ID coverage. The host must supply the
 expected IDs; unknown source IDs leave whole-history byte coverage unknown.
 
-When exact source recovery matters, call `remember(..., write_mode="lossless_atomic")`.
-The Hermes remember tool exposes the same mode and a closed `source_segments`
+When exact source recovery matters, call MCP `remember` with
+`write_mode="lossless_atomic"` and a closed `source_segments`
 array. `content` must equal the exact concatenation of segment texts, with no
 added separators, whitespace normalization, or paraphrase. A mismatch is rejected
 before storage. Inline segments without a registered source prove only segment
@@ -288,7 +288,7 @@ The write keeps the complete source text in the immutable canonical record and
 stores `metadata.source_segments` with a source ID, speaker/time fields and a
 SHA-256 of every segment. `summary_count` is zero in this mode; a native
 embedding window may limit only its derived index. Read the canonical record by
-`MemoryClient.read_exact_record(record_id=...)` or by an exact evidence/source
+the Go client's `ReadStored` or by an exact evidence/source
 reference before constructing an answer.
 For deliberate enumeration, `list_records` requires a scope and scope ID and
 returns content-free record IDs in pages. Its cursor freezes the initial ID set;
@@ -296,7 +296,7 @@ new writes require a new listing. Use `read_exact_record` or `read_exact_records
 to inspect selected IDs. After a write, keep its `operation_id` and query
 `operation_status` for the original durable receipt and current projection
 state; use `projection_barrier` only when native indexing must have caught up.
-In Hermes, pass `record_ids` and the matching `logical_block_ids` to scoped recall
+In MCP, pass `record_ids` and the matching `logical_block_ids` to scoped recall
 to expand a truncated card. Keep the date and speaker attribution with the source.
 The compact recall receipt also lists `unrendered_record_refs` when ranked
 candidates could not fit in the context budget. These are references, not
@@ -320,7 +320,7 @@ Failed native reads carry `reason_code` and `retryable`; they are not empty resu
 and do not establish absence of knowledge.
 
 Every successful write has a durable commit followed by a native projection.
-Use `MemoryClient.projection_barrier` when a dependent recall must observe the
+Use the Go client's `ProjectionBarrier` when a dependent recall must observe the
 projection revision. The barrier polls only that record's projection state
 until its deadline; it does not start reconciliation. A pending projection
 returns `projection_deadline_exceeded` at the deadline, while a failed

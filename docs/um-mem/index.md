@@ -91,9 +91,9 @@ both can still navigate the same passive tree.
   for user-level MCP tools plus native hooks. Both have a one-pass same-agent
   review at `Stop`; Codex also has a bounded prompt read. Verify hooks actually
   run in the host before expecting records in the atlas.
-- Use the [Hermes memory provider](hermes_runtime_integration_user_guide.md)
-  when the host's native provider lifecycle should supply pre-round context.
-- Use the [Python API](interfaces.md#python-api) inside another host or control
+- Use the [Hermes Go hooks](hermes_runtime_integration_user_guide.md)
+  to supply bounded context at a host boundary.
+- Use the [Go API](interfaces.md#go-api) inside another host or control
   plane.
 
 Continue with the [quickstart](quickstart.md), then read the

@@ -1,23 +1,41 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import plugin from "../dist/index.js";
 
 test("native Mnemosyne: pages, hypothesis, correction, focus switch, retraction and cross-session recall", {
-  skip: !process.env.UM_MEM_SMOKE_PYTHON,
-  timeout: 120_000,
+  skip: !process.env.UM_MEM_SMOKE_GO && !process.env.UM_MEM_SMOKE_GO_BIN_DIR,
+  timeout: 180_000,
 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "um-mem-opencode-"));
-  const env = { UM_MEM_REPO_ROOT: root, UM_MEM_WORKSPACE: "smoke", UM_MEM_PROFILE: "default", UM_MEM_BACKEND: "mnemosyne", UM_MEM_SEMANTIC: "0" };
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  const source = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const binary = (name) => join(root, name + suffix);
+  const env = { UM_MEM_REPO_ROOT: root, UM_MEM_WORKSPACE: "smoke",
+    UM_MEM_PROFILE: "default", UM_MEM_BACKEND: "mnemosyne",
+    UM_MEM_LOCAL_SERVICE_IDLE_SECONDS: "1" };
   const tools = new Map();
   const hooks = new Map();
   let cleanup;
   try {
+    for (const name of ["um-memory", "um-memory-mcp", "um-memory-service"]) {
+      if (process.env.UM_MEM_SMOKE_GO_BIN_DIR) {
+        await copyFile(join(process.env.UM_MEM_SMOKE_GO_BIN_DIR, name + suffix), binary(name));
+        await chmod(binary(name), 0o755);
+      } else {
+        execFileSync(process.env.UM_MEM_SMOKE_GO,
+          ["build", "-tags", "purego", "-o", binary(name), `./cmd/${name}`],
+          { cwd: source, env: { ...process.env, CGO_ENABLED: "0" },
+            stdio: "pipe", timeout: 120_000 });
+      }
+    }
     cleanup = await plugin.setup({
-      options: { command: [process.env.UM_MEM_SMOKE_PYTHON, "-m", "um_mem.memory.mcp_server"], env },
+      options: { command: [binary("um-memory-mcp"), "--repo-root", root,
+        "--workspace", "smoke", "--profile", "default", "--backend", "mnemosyne"], env },
       location: { directory: root },
       tool: { transform: async (apply) => apply({ namespace() {}, add: (tool) => tools.set(tool.name, tool) }) },
       session: { hook: async (name, hook) => hooks.set(name, hook) },
@@ -48,14 +66,19 @@ test("native Mnemosyne: pages, hypothesis, correction, focus switch, retraction 
     } while (cursor);
     assert.deepEqual(new Set(seen), new Set([leaf.block_id, secondLeaf.block_id, distractor.block_id]));
     const saved = await call("remember", { content: "The opaque constraint is A7K.", title: "Opaque constraint", kind: "user_preference", evidence_kind: "user_statement", requested_block_id: leaf.block_id });
-    execFileSync(process.env.UM_MEM_SMOKE_PYTHON, [
-      "-c",
-      "import sys; from um_mem import MemoryClient; result = MemoryClient(sys.argv[1], workspace_id='smoke', backend='mnemosyne').remember('The old shared workspace note is W4P.', title='Shared legacy note', evidence_kind='user_statement', requested_block_id=sys.argv[2]); assert result.saved",
-      root,
-      distractor.block_id,
-    ], { env: { ...process.env, ...env }, stdio: "pipe", timeout: 30_000 });
+    const requestPath = join(root, "workspace-note.json");
+    await writeFile(requestPath, JSON.stringify({ content: "The old shared workspace note is W4P.",
+      title: "Shared workspace note", evidence_kind: "user_statement",
+      requested_block_id: distractor.block_id }));
+    const workspaceWrite = JSON.parse(execFileSync(binary("um-memory"), [
+      "remember-candidate", "--repo-root", root, "--workspace", "smoke",
+      "--profile", "default", "--backend", "mnemosyne", "--request-file", requestPath,
+    ], { env: { ...process.env, ...env }, encoding: "utf8", timeout: 30_000 }));
+    assert.equal(workspaceWrite.saved, true);
     const recalled = await call("recall", { query: "opaque constraint", logical_block_ids: [leaf.block_id] });
-    assert.equal(recalled.items[0].kind, "user_preference");
+    assert.ok(Array.isArray(recalled.hits) && recalled.hits.length > 0,
+      JSON.stringify({ saved, recalled }));
+    assert.equal(recalled.hits[0].kind, "user_preference");
     await call("set_active_mask", { selected_block_ids: [leaf.block_id, distractor.block_id], token_budget: 500, activation_reason: "current smoke task" });
     const round = async (sessionID) => {
       const event = { sessionID, system: [], messages: [] };
@@ -71,13 +94,14 @@ test("native Mnemosyne: pages, hypothesis, correction, focus switch, retraction 
     assert.doesNotMatch(next, /A7K/);
     assert.doesNotMatch(await round("native-b"), /B9R|A7K/);
     const shared = await call("recall", { query: "opaque constraint", logical_block_ids: [leaf.block_id] }, "native-b");
-    assert.match(shared.items[0].text, /B9R/);
-    assert.equal(shared.items[0].authority, "advisory");
+    assert.match(shared.hits[0].text, /B9R/);
+    assert.equal(shared.hits[0].authority, "advisory");
     const legacy = await call("recall", { query: "old shared workspace note", logical_block_ids: [distractor.block_id] }, "native-b");
-    assert.match(legacy.items[0].text, /W4P/);
+    assert.match(legacy.hits[0].text, /W4P/);
     const hypothesis = await call("remember", { content: "Unverified hypothesis: the second topic constraint is C5L.", title: "Second-topic hypothesis", requested_block_id: secondLeaf.block_id });
     let mask = await call("get_active_mask", {});
-    await call("amend_active_mask", { mask_id: mask.mask_id, expected_revision: mask.revision, selected_block_ids: [secondLeaf.block_id], activation_reason: "switch to the second topic" });
+    assert.ok(mask.mask, JSON.stringify(mask));
+    await call("amend_active_mask", { mask_id: mask.mask.mask_id, expected_revision: mask.mask.revision, selected_block_ids: [secondLeaf.block_id], activation_reason: "switch to the second topic" });
     const switched = await round("native-a");
     assert.match(switched, /C5L/);
     assert.match(switched, /unverified/i);
@@ -85,11 +109,11 @@ test("native Mnemosyne: pages, hypothesis, correction, focus switch, retraction 
     await call("forget", { memory_id: hypothesis.memory_id, reason: "hypothesis refuted by evidence" });
     assert.doesNotMatch(await round("native-a"), /C5L|A7K|B9R/);
     mask = await call("get_active_mask", {});
-    await call("transition_active_mask", { mask_id: mask.mask_id, expected_revision: mask.revision, transition: "deactivate", reason: "task finished" });
+    await call("transition_active_mask", { mask_id: mask.mask.mask_id, expected_revision: mask.mask.revision, transition: "deactivate", reason: "task finished" });
     assert.doesNotMatch(await round("native-a"), /B9R|A7K/);
   } finally {
     if (cleanup) await cleanup();
-    execFileSync(process.env.UM_MEM_SMOKE_PYTHON, ["-c", "from um_mem.memory.local_service import build_local_service_identity, shutdown_local_service_listener; shutdown_local_service_listener(build_local_service_identity(repo_root=None, workspace_id=None, backend=None, caller_role='operator'))"], { env: { ...process.env, ...env }, stdio: "pipe", timeout: 30_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2200));
     await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });

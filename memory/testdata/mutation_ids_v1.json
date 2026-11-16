@@ -1,0 +1,10 @@
+{
+  "record_fixture": "record_bound_v9.json",
+  "canonical_key": "alpha:team:observation:a79bea9609d33a060538107a",
+  "block_id_for_key": "mem_d82c6f38bc46fb64",
+  "revision_id": "rev_f66d0e5bf50d07bdd7cdfe8f44c1b81bd6e735901aeade0832e1ace87b95594b",
+  "successor_revision_id": "rev_6bafb4615428f7115a12e2525a9b1d444c03e16c676e5f7af55f356e6fde00fd",
+  "block_id_for_revision": "mem_rev_3c3c8963b5a99284",
+  "duplicate_cluster_id": "dup_4e25e73183a3f51d85dc45e067f91a33bfd89fd11e4424d0f24c0c3cb48160a0",
+  "unicode_key": "проект:наблюдение:1d5a92e06cdb989c1931854e"
+}

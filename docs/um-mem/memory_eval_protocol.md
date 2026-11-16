@@ -25,10 +25,12 @@ the contract suite still proves the authority boundaries:
 
 ## Commands
 
-```bash
-pytest -q
-pytest -q tests/test_memory_architecture_invariants.py tests/test_memory_authority_and_isolation.py
-pytest -q tests/test_lifecycle_mutation_journal.py
+```console
+go test ./...
+go vet ./...
+go test -tags purego ./...
+npm test --prefix npm
+npm test --prefix integrations/opencode
 ```
 
 The default suite never downloads an embedding model and never reads the
