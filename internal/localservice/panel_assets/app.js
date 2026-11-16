@@ -1,7 +1,7 @@
 import {layoutHierarchy,separateOverlaps,zoomAt,fitBounds,mapProjection,graphTransition,sampleGraphTransition} from './graph-layout.mjs';
 import {scopeBlocks,scopeCount,createBranchPager,filterBlocks,filterRecords,sortRecords,panelPreferences,readAllRecords} from './branch-records.mjs';
 const $ = id => document.getElementById(id);
-const state = {snapshot:null, records:[], browseRecords:[], block:'', cursor:'', scope:{scope:'workspace',scopeId:''}, scopeLimited:false, view:'memory', mode:'graph',
+const state = {snapshot:null, records:[], browseRecords:[], block:'', cursor:'', scope:{scope:'workspace',scopeId:''}, scopeLimited:false, view:'memory', mode:'list',
   selected:'', detail:null, draft:null, query:'', events:[], positions:{}, manualNodes:new Set(),
   treeExpanded:new Set(), treeReady:false, descendants:true, pager:null, browseRequest:0, recordsLoading:false, recordsError:'',
   blockQuery:'', hideEmpty:false, recordStatus:'', recordKind:'', recordSort:'newest', recordLimit:64, recordsScanned:0, preferencesReady:false,
@@ -40,6 +40,11 @@ function badge(status) {
 function date(value) {const d=new Date(value); return isNaN(d)?'Без даты':d.toLocaleString('ru',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
 function flatten(nodes, out=[]) {for(const n of nodes||[]){out.push(n);flatten(n.children,out);}return out;}
 function topic(id) {return flatten(state.snapshot?.tree).find(n=>n.block_id===id);}
+// Logical blocks hold the records but are not nodes of the tree, so `topic()`
+// cannot name them. Without this map every card fell back to "Общая память",
+// which hid the only distinction the reader cares about.
+const BLOCK_LABELS={user_global_preferences:'Предпочтения',user_global_core_directives:'Директивы',workspace_core_directives:'Правила',decisions_and_contracts:'Договорённости',stable_project_facts:'Факты',mutable_project_state:'Активная память',task_state:'Задача',execution_working_state:'Ход работы',reflection_candidates:'Выводы',verified_lessons:'Уроки',project_ideas:'Идеи',workspace_episodes:'Эпизоды',durable_reports:'Отчёты',artifact_claims:'Артефакты',code_resources:'Код',project_resources:'Ресурсы',skills_index:'Навыки',transient_logs:'Логи'};
+function blockLabel(id){return BLOCK_LABELS[id]||topic(id)?.name||id||'Общая память';}
 function blockScopeHint() {
   const block=topic(state.block);if(!block)return '';
   const blockScope=block.scope||'workspace';
@@ -274,7 +279,7 @@ function renderRecords() {
     const top=element('div','card-top'),kind=element('div','record-kind');
     kind.append(icon(recordIcon(r.kind)),element('span','',kindNames[r.kind]||r.kind||'Запись'));
     top.append(kind,badge(r.status));
-    const bottom=element('div','card-bottom');bottom.append(element('span','',topic(r.logical_block_id)?.name||'Общая память'),
+    const bottom=element('div','card-bottom');bottom.append(element('span','',blockLabel(r.logical_block_id)),
       element('span','',date(r.recorded_at)));
     if(r.score!==undefined)card.title=`${r.score_mode==='semantic_cosine'?'Сходство':'Оценка'}: ${Number(r.score).toFixed(3)}. Оценка поиска не подтверждает достоверность записи.`;
     card.append(top,element('h3','',r.title||'Без названия'),element('p','',r.preview||''),bottom);list.append(card);
@@ -1111,11 +1116,10 @@ function showStopped(){state.stopped=true;state.source?.close();connected(false)
 $('stop-panel').onclick=async()=>{if(state.draft?.saving){toast('Дождитесь результата сохранения.');return;}$('stop-panel').disabled=true;
   try{await api('api/stop',{});showStopped();}catch(error){$('stop-panel').disabled=false;toast(error.message);}};
 
-function treeRecordCount(snapshot){const sum=node=>Number(node.canonical_record_count||0)+(node.children||[]).reduce((total,child)=>total+sum(child),0);return (snapshot?.tree||[]).reduce((total,node)=>total+sum(node),0);}
 function treeHasBranches(snapshot){return (snapshot?.tree||[]).some(node=>(node.children||[]).length>0);}
 // Records are filed into logical blocks, which are not nodes of the block tree.
 // A store full of records can therefore render as an empty graph on first open.
-function preferredMode(){if(!state.snapshot)return state.mode;if(state.mode!=='graph')return state.mode;if(treeRecordCount(state.snapshot)>0&&!treeHasBranches(state.snapshot))return 'list';return state.mode;}
+function preferredMode(){if(!state.snapshot)return state.mode;const count=(state.snapshot.records||[]).length;if(count>0&&!treeHasBranches(state.snapshot))return 'list';return state.mode;}
 
 async function start() {
   try {
