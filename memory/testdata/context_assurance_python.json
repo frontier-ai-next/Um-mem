@@ -1,0 +1,224 @@
+[
+  {
+    "name": "valid_review",
+    "metadata": {
+      "verification_status": "verified",
+      "trust_level": "workspace_verified",
+      "authority": "directive",
+      "sensitivity": "internal",
+      "content_mode": "full",
+      "operational_risk": "low",
+      "semantic_review": {
+        "record_id": "record7",
+        "revision_id": "rev7",
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_authority_id": "source",
+        "source_authority_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "review_authority_id": "reviewer",
+        "review_authority_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "manifest_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "verification_scope": "semantic",
+      "promotion_source_id": "record7",
+      "evidence_refs": [
+        {
+          "ref_type": "verification_report",
+          "producer_id": "reviewer",
+          "hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      ]
+    },
+    "expected": {
+      "trust_level": "workspace_verified",
+      "authority": "directive",
+      "verification_status": "verified"
+    }
+  },
+  {
+    "name": "forged_review",
+    "metadata": {
+      "verification_status": "verified",
+      "trust_level": "workspace_verified",
+      "authority": "directive",
+      "sensitivity": "internal",
+      "content_mode": "full",
+      "operational_risk": "low",
+      "semantic_review": {
+        "record_id": "record7",
+        "revision_id": "rev7",
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_authority_id": "source",
+        "source_authority_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "review_authority_id": "source",
+        "review_authority_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "manifest_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "verification_scope": "semantic",
+      "promotion_source_id": "record7",
+      "evidence_refs": [
+        {
+          "ref_type": "verification_report",
+          "producer_id": "reviewer",
+          "hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      ]
+    },
+    "expected": {
+      "source_authority": "directive",
+      "trust_level": "agent_reported",
+      "authority": "advisory",
+      "verification_status": "unverified"
+    }
+  },
+  {
+    "name": "valid_candidate",
+    "metadata": {
+      "verification_status": "verified",
+      "trust_level": "workspace_verified",
+      "authority": "directive",
+      "sensitivity": "internal",
+      "content_mode": "full",
+      "operational_risk": "low",
+      "candidate_semantic_verification": {
+        "result": {
+          "subject": {
+            "workspace_id": "alpha",
+            "profile_id": "team",
+            "memory_id": "record9",
+            "revision_id": "rev9",
+            "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "source_evidence_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "target_block_id": "stable_project_facts",
+            "authority": "directive",
+            "scope": "workspace",
+            "scope_id": "alpha"
+          },
+          "verifier_id": "verifier",
+          "verifier_model_version": "model-2",
+          "proposer_model_version": "model-1",
+          "verifier_prompt_version": "prompt-1",
+          "coverage": true,
+          "preservation": true,
+          "faithfulness": true,
+          "instruction_safety": true,
+          "reasons": [
+            "checked"
+          ],
+          "semantic_subject_hash": "58e42c880a3773e6649b67c76db03682b6b62d5c2b766d4c563d39f4725b0ce2"
+        },
+        "report": {
+          "report_id": "report9",
+          "report_hash": "7681141455b1d91aa865b9963099ef474d26a1053c539fc70b6c89f54b2dbee1",
+          "workspace_hash": "",
+          "diff_hash": "",
+          "produced_after_event_id": "",
+          "verifier_id": "verifier",
+          "passed": true,
+          "ledger_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      "promotion_source_id": "record9",
+      "promotion_source_revision_id": "rev9",
+      "workspace_id": "alpha",
+      "profile_id": "team",
+      "scope": "workspace",
+      "block_membership": {
+        "primary_block_id": "stable_project_facts"
+      },
+      "evidence_refs": [
+        {
+          "ref_type": "verification_report",
+          "ref_id": "report9",
+          "producer_id": "verifier",
+          "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      ]
+    },
+    "expected": {
+      "trust_level": "workspace_verified",
+      "workspace_id": "alpha",
+      "authority": "directive",
+      "scope": "workspace",
+      "verification_status": "verified",
+      "block_membership": {
+        "primary_block_id": "stable_project_facts"
+      }
+    }
+  },
+  {
+    "name": "forged_candidate",
+    "metadata": {
+      "verification_status": "verified",
+      "trust_level": "workspace_verified",
+      "authority": "directive",
+      "sensitivity": "internal",
+      "content_mode": "full",
+      "operational_risk": "low",
+      "candidate_semantic_verification": {
+        "result": {
+          "subject": {
+            "workspace_id": "alpha",
+            "profile_id": "team",
+            "memory_id": "record9",
+            "revision_id": "rev9",
+            "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "source_evidence_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "target_block_id": "stable_project_facts",
+            "authority": "directive",
+            "scope": "workspace",
+            "scope_id": "alpha"
+          },
+          "verifier_id": "verifier",
+          "verifier_model_version": "model-2",
+          "proposer_model_version": "model-1",
+          "verifier_prompt_version": "prompt-1",
+          "coverage": true,
+          "preservation": true,
+          "faithfulness": true,
+          "instruction_safety": true,
+          "reasons": [
+            "checked"
+          ],
+          "semantic_subject_hash": "58e42c880a3773e6649b67c76db03682b6b62d5c2b766d4c563d39f4725b0ce2"
+        },
+        "report": {
+          "report_id": "report9",
+          "report_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "workspace_hash": "",
+          "diff_hash": "",
+          "produced_after_event_id": "",
+          "verifier_id": "verifier",
+          "passed": true,
+          "ledger_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      "promotion_source_id": "record9",
+      "promotion_source_revision_id": "rev9",
+      "workspace_id": "alpha",
+      "profile_id": "team",
+      "scope": "workspace",
+      "block_membership": {
+        "primary_block_id": "stable_project_facts"
+      },
+      "evidence_refs": [
+        {
+          "ref_type": "verification_report",
+          "ref_id": "report9",
+          "producer_id": "verifier",
+          "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      ]
+    },
+    "expected": {
+      "source_authority": "directive",
+      "trust_level": "agent_reported",
+      "workspace_id": "alpha",
+      "authority": "advisory",
+      "scope": "workspace",
+      "verification_status": "unverified",
+      "block_membership": {
+        "primary_block_id": "stable_project_facts"
+      }
+    }
+  }
+]

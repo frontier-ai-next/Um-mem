@@ -1,35 +1,12 @@
-# Lethyx Agent Guide
+# UM-MEM development guide
 
-Lethyx is a framework-neutral agent memory package. Treat `src/lethyx` as the only product namespace.
+UM-MEM is a Go memory runtime. The public module is `github.com/frontier-ai-next/Um-mem`.
+The CLI, MCP server, service and lifecycle hooks live under `cmd/`; OpenCode is an optional TypeScript integration.
 
-## Read First
-
-- `README.md`, `PORTING_PLAN.md`, and `RELEASE_PLAN.md` for product status and release work.
-- `docs/lethyx/memory_architecture.md` for current authority and backend rules.
-- `docs/lethyx/memory_methodology.md` for backend-neutral memory invariants.
-- `docs/lethyx/memory_eval_protocol.md` before changing eval/report behavior.
-- `src/lethyx/memory/README.md` for older structured-memory context that may still explain copied code.
-
-## Project Invariants
-
-- Memory is advisory. Host control planes own routing, proof validity, permissions, and task completion.
-- Durable writes must go through the backend-neutral writer and exactly one selected backend per run/workspace: `mempalace`, `hindsight`, or `mnemosyne`.
-- Retrieval, graph recall, and backend-native recall stay supplemental unless promoted through evidence and tribunal gates.
-- Only active, curated, scoped, evidence-backed memory may become directive.
-- Candidate, quarantined, superseded, deprecated, and retracted memory must not render as directive.
-- Keep orchestration-specific phase/runner hooks in optional adapters, not core `lethyx`.
-- Do not add cloud memory providers, remote persistence, or API-key requirements without explicit user approval.
-
-## Development Workflow
-
-- Prefer narrow changes that preserve the porting path: core API first, adapters second, compatibility cleanup last.
-- Use existing copied tests, memory scenario harnesses, and `benchmarks/memory_bench/` as contract material while porting them to `lethyx`.
-- When public behavior changes, test authority boundaries: directive contamination, retrieval leakage, workspace isolation, evidence coverage, promotion gates, lifecycle state, and backend selection.
-- Keep third-party reference material outside the release tree unless it is turned into an explicit adapter or documented benchmark fixture.
-- Keep docs honest about implemented behavior versus planned optional live smoke or provider integrations.
-
-## Local Memory Setup
-
-Keep local tool/MCP experiments out of the release tree. Use Lethyx's packaged
-MCP server or Hermes provider integration for project memory, and do not commit
-machine-local wrappers, runtime stores, credentials, logs, or generated profiles.
+- Memory is advisory. Hosts own routing, permissions, proof validity and task completion.
+- Durable writes use the canonical journal and exactly one selected native backend.
+- Scope, provenance, promotion and lifecycle checks must stay enforced.
+- Keep local stores, credentials, environment files, logs and generated binaries out of Git and release packages.
+- Keep public installation independent of private repositories and package tokens.
+- Verify Go tests and vet with and without `purego`, npm installation, OpenCode and panel tests.
+- Releases must come from `main`, match `npm/package.json`, and include verified binaries and `SHA256SUMS`.

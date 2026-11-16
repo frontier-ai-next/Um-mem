@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>__STYLE__</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>UM-MEM memory graph</h1>
+    <div class="sub">__SUBTITLE__</div>
+  </div>
+  <div class="tools">
+    <input id="q" type="search" placeholder="Find a record or tag" autocomplete="off">
+    <select id="kind"></select>
+    <label class="chip-toggle"><input id="links" type="checkbox" checked> links</label>
+    <button id="theme" type="button" title="Dark theme">☾</button>
+    <button id="fit" type="button">fit</button>
+  </div>
+  <div class="stats">__STATS__</div>
+</header>
+<main>
+  <div id="stage">
+    <canvas id="graph"></canvas>
+    <div id="tooltip"></div>
+    <div id="matches" class="matches"></div>
+    <div class="hint">drag a card to move it · drag empty space to pan · scroll to zoom · double-click to reset</div>
+  </div>
+  <aside id="detail"></aside>
+</main>
+<script id="map-data" type="application/json">__DATA__</script>
+<script>__SCRIPT__</script>
+</body>
+</html>

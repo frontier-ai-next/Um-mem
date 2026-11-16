@@ -1,0 +1,32 @@
+{
+  "identity": {
+    "workspace_id": "alpha",
+    "profile_id": "team",
+    "backend": "hindsight",
+    "caller_role": "go_test",
+    "protocol_version": 2,
+    "mutation_correlation_id": "operation-µ-1"
+  },
+  "arguments": {
+    "tool": "remember",
+    "request": {
+      "content": "Привет, Go",
+      "tags": [
+        "source",
+        "x"
+      ]
+    }
+  },
+  "response": {
+    "ok": true,
+    "saved": true,
+    "canonical_reference": "mem_python",
+    "canonical_key": "alpha:team:observation:fixture",
+    "revision_id": "rev_python",
+    "recorded_at": "2026-10-23T00:00:00Z",
+    "native_reference": "UM-MEM:block:mem_python",
+    "backend": "hindsight",
+    "workspace_id": "alpha"
+  },
+  "created_at": "2026-10-23T20:26:32.051652+00:00"
+}

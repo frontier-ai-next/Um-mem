@@ -1,0 +1,16 @@
+{
+  "partition": {
+    "backend_id": "mempalace",
+    "workspace_id": "alpha",
+    "primary_block_id": "leaf",
+    "catalog_revision_id": "cat:v1",
+    "partition_id": "mempalace:collection-family:1b7944554dfe6b9c36b92d2ef365d7cb168bace37fcab3563bf033e809ab75f4",
+    "isolation_class": "physical",
+    "partition_mode": "native_collection_family"
+  },
+  "store": "palace.idea",
+  "collection_name": "ummem_1b7944554dfe6b9c36b92d2ef365d7cb168bace37fcab3563bf033e809ab75f4_palace_idea",
+  "native_ids": [
+    "mem_bound"
+  ]
+}

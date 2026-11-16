@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UM-MEM · Память</title>
+  <link rel="stylesheet" href="/panel/assets/style.css">
+  <link rel="stylesheet" href="/panel/assets/refinement.css">
+  <script type="module" src="/panel/assets/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/panel/" aria-label="UM-MEM"><span class="brand-mark" data-icon="atlas"></span><span>UM-MEM</span></a>
+    <nav aria-label="Разделы"><button class="nav active" data-view="memory" data-icon="map">Атлас</button><button class="nav" data-view="activity" data-icon="activity">Изменения</button><button class="nav" data-view="context" data-icon="layers">Контекст</button></nav>
+    <div class="header-status"><span id="connection-dot" class="dot"></span><span id="connection" role="status">Подключение</span><button id="stop-panel" class="icon-button" aria-label="Остановить панель" title="Остановить панель">⏻</button></div>
+  </header>
+  <div class="app-body">
+    <aside id="sidebar" class="sidebar" aria-label="Блоки памяти">
+      <div class="workspace"><strong id="workspace">Подключение…</strong></div>
+      <div id="data-controls" class="data-controls" hidden>
+        <details id="workspace-menu" class="workspace-menu">
+          <summary id="workspace-trigger" aria-label="Выбрать пространство памяти" title="Пространства памяти"><span id="workspace-name">Память</span><span class="workspace-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="workspace-popover">
+            <div id="workspace-options" class="workspace-options" role="group" aria-label="Доступные пространства памяти"></div>
+            <section id="workspace-unavailable" class="workspace-unavailable" aria-labelledby="workspace-unavailable-title" hidden><h3 id="workspace-unavailable-title">Недоступные пространства</h3><ul id="workspace-issues"></ul></section>
+            <p id="workspace-notice" class="workspace-notice" hidden></p>
+          </div>
+        </details>
+        <label class="archive-option"><input id="show-archived" type="checkbox"> <span id="archive-label">Архив</span></label>
+      </div>
+      <button id="all-topics" class="overview-button" data-icon="map">Вся память</button>
+      <div class="topic-heading"><span>Блоки</span><span id="tree-count"></span></div>
+      <div class="tree-filters"><div class="block-search"><input id="block-query" type="search" aria-label="Поиск блоков" placeholder="Найти блок…" autocomplete="off"><button id="clear-block-query" class="icon-button" aria-label="Очистить поиск блоков" hidden>✕</button></div><label class="hide-empty-option"><input id="hide-empty" type="checkbox"> Скрыть пустые ветки</label><span id="block-filter-note" role="status" hidden></span></div>
+      <div id="topics" class="topics" aria-label="Блоки памяти"></div>
+    </aside>
+    <main>
+      <div id="banner" class="banner" role="status" hidden></div>
+      <div class="canvas-header"><div class="canvas-title"><button id="toggle-topics" class="icon-button" aria-label="Показать блоки памяти" aria-controls="sidebar" aria-expanded="false" title="Блоки памяти" data-icon="menu"></button><div><nav id="breadcrumbs" class="breadcrumbs" aria-label="Путь к блоку" hidden></nav><h1 id="page-title">Карта знаний</h1></div></div><div class="header-actions"><button class="primary" id="new-record" data-icon="plus">Запись</button></div></div>
+      <section id="memory-view" class="memory-view">
+        <div class="toolbar"><form id="search-form"><label class="search"><span data-icon="search"></span><input id="query" aria-label="Поиск по памяти" placeholder="Найти в памяти…" autocomplete="off"><button type="submit" aria-label="Найти">↵</button></label></form><button id="toggle-filters" class="secondary filter-toggle" aria-expanded="false" aria-controls="record-filters" data-icon="filter">Фильтры<span id="filter-count" hidden></span></button><div class="segmented"><button class="selected" id="graph-mode" data-icon="map">Граф</button><button id="list-mode" data-icon="list">Записи</button></div></div>
+        <div id="record-filters" class="record-filters" aria-label="Фильтры записей" hidden><label>Память<select id="memory-scope" aria-label="Пространство или проект"></select></label><form id="project-scope-form" hidden><label>Точный ID проекта<input id="project-scope-id" aria-label="Точный ID проекта" autocomplete="off"></label><button type="submit" class="secondary">Открыть</button></form><label>Область<select id="record-scope" aria-label="Область записей"><option value="branch">С вложенными блоками</option><option value="block">Только этот блок</option></select></label><label>Статус<select id="record-status" aria-label="Статус записей"></select></label><label>Тип записи<select id="record-kind" aria-label="Тип записей"></select></label><label>По дате<select id="record-sort" aria-label="Сортировка записей по дате"><option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option></select></label><button id="reset-record-filters" class="text-button" hidden>Сбросить фильтры</button></div>
+        <div class="scope-bar"><span id="scope-caption" role="status"></span><div id="active-filters" class="active-filters" aria-label="Выбранные фильтры"></div></div>
+        <div id="search-info" class="search-info" hidden></div>
+        <div id="graph-wrap">
+          <div id="graph-scope-caption" class="sr-only" role="status"></div>
+          <svg id="graph" viewBox="0 0 1100 700" role="group" tabindex="0" aria-label="Интерактивный граф памяти"><g id="graph-scene"></g></svg>
+          <div id="graph-empty" class="graph-empty" hidden></div>
+          <div id="selection-tools" class="selection-tools" role="toolbar" aria-label="Действия с выбранным объектом" aria-orientation="vertical">
+            <button id="selection-info" class="icon-button" data-icon="info" aria-label="Сведения о выбранном объекте" title="Сведения"></button>
+            <button id="selection-edit" class="icon-button" data-icon="edit" aria-label="Редактировать выбранный объект" title="Редактировать" disabled></button>
+            <button id="selection-add" class="icon-button" data-icon="plus" aria-label="Добавить запись в выбранный блок" title="Добавить запись" disabled></button>
+            <span class="tool-divider"></span>
+            <button id="selection-focus" class="icon-button" data-icon="locate" aria-label="Показать расположение в графе" title="Показать расположение в графе" disabled></button>
+            <details id="selection-more"><summary aria-label="Другие действия с выбранным объектом" title="Другие действия">⋯</summary><div class="selection-menu"><button id="selection-history">История записи</button><button id="selection-parent">Родительский блок</button></div></details>
+          </div>
+          <div id="minimap-wrap" class="minimap" hidden><svg id="minimap" viewBox="0 0 160 108" tabindex="0" role="group" aria-label="Мини-карта графа" aria-description="Нажмите на блок для перехода. Перетаскивайте рамку или используйте стрелки для перемещения."><g id="minimap-scene"></g><rect id="minimap-viewport"/></svg></div>
+          <div class="graph-tools"><button id="zoom-out" class="square" aria-label="Уменьшить" title="Уменьшить" data-icon="minus"></button><button id="zoom-level" aria-label="Масштаб 100%" title="Масштаб 100% · 0">100%</button><button id="zoom-in" class="square" aria-label="Увеличить" title="Увеличить" data-icon="plus"></button><i></i><button id="graph-reset" class="graph-overview" aria-label="Показать весь граф" title="Весь граф" data-icon="expand">Весь граф</button><details id="graph-more" class="graph-more"><summary aria-label="Действия с графом" title="Действия с графом">⋯</summary><div class="graph-menu"><button id="expand-all" aria-label="Раскрыть весь граф" data-icon="plus">Раскрыть всё</button><button id="collapse-all" aria-label="Свернуть ветки" data-icon="minus">Свернуть ветки</button><button id="graph-focus" aria-label="Показать только текущую ветку" title="Изолировать текущую ветку · F" data-icon="map">Фокус на ветке</button><button id="arrange-graph" data-icon="arrange">Упорядочить</button><label><input id="show-minimap" type="checkbox"> Мини-карта</label></div></details></div>
+        </div>
+        <div id="list-area" hidden><div class="section-line"><h2 id="collection-title">Записи</h2><span id="collection-note" role="status"></span></div><div id="list" class="record-list" aria-live="polite"></div></div>
+        <button id="load-more" class="secondary load-more" hidden>Ещё записи</button>
+      </section>
+      <section id="activity-view" class="scroll-view" hidden><div id="activity" aria-label="События с момента открытия панели"></div></section>
+      <section id="context-view" class="scroll-view" hidden><div class="context-intro"><h2 title="Сведения, переданные агентам. Передача не подтверждает использование в ответе.">Передано агентам</h2></div><div id="sessions" class="session-list"></div><div id="context-events"></div></section>
+      <footer><div class="stats"><span><b id="stat-topics">—</b> блоков</span><span><b id="stat-records">—</b> записей</span></div><button id="help-button" class="text-button" aria-expanded="false" aria-controls="keyboard-help" data-icon="keyboard" aria-label="Подсказки по управлению"></button></footer>
+    </main>
+    <aside id="detail" class="detail" aria-label="Сведения памяти" hidden><div class="detail-head"><span id="detail-label">В ПАМЯТИ</span><button id="close-detail" class="icon-button" aria-label="Закрыть сведения" title="Закрыть" data-icon="close"></button></div><div id="detail-content"></div></aside>
+  </div>
+  <div id="stopped" class="stopped" hidden><span class="brand-mark">✳</span><h1>Атлас закрыт</h1><p>Память Codex и OpenCode продолжает работать.<br>Чтобы открыть карту, запустите:</p><code>um-memory dashboard</code><p class="metadata">Или воспользуйтесь ярлыком UM-MEM.</p></div>
+  <div id="toast" role="status" hidden></div>
+  <dialog id="discard-dialog" class="discard-dialog" aria-labelledby="discard-title" aria-describedby="discard-description">
+    <form method="dialog">
+      <h2 id="discard-title">Отменить изменения?</h2>
+      <p id="discard-description">Несохранённые правки будут удалены. Сохранённая версия в памяти не изменится.</p>
+      <div class="discard-actions"><button type="submit" value="keep" class="primary" autofocus>Продолжить редактирование</button><button type="submit" value="discard" class="secondary">Отменить изменения</button></div>
+    </form>
+  </dialog>
+  <div id="keyboard-help" class="keyboard-help" hidden><strong>Исследуйте в своём темпе</strong><p><kbd>Пробел</kbd> Раскрыть выбранный блок</p><p><kbd>Enter</kbd> Показать сведения о блоке или записи</p><p><kbd>F</kbd> Сосредоточиться на ветке</p><p><kbd>0</kbd> Вернуть читаемый масштаб</p><p><kbd>/</kbd> Поиск в памяти</p><p><kbd>Backspace</kbd> На уровень выше</p><p><kbd>Ctrl + колесо</kbd> Масштаб карты</p><p class="metadata">Перетаскивайте блоки для своей раскладки. «Упорядочить» восстановит расположение.</p></div>
+</body>
+</html>

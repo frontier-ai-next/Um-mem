@@ -1,0 +1,270 @@
+[
+  {
+    "name": "accepted",
+    "request": {
+      "name": "accepted",
+      "requested_block_id": "stable_project_facts",
+      "kind": "observation",
+      "tags": [
+        "source"
+      ]
+    },
+    "decision": {
+      "accepted": true,
+      "reason": "requested_block_policy",
+      "block_id": "stable_project_facts",
+      "retention": "durable",
+      "delivery_policy": "on_demand",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "source",
+        "observation"
+      ],
+      "policy_issues": [],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "",
+      "suggested_action": ""
+    }
+  },
+  {
+    "name": "index",
+    "request": {
+      "name": "index",
+      "requested_block_id": "memory_root_index",
+      "kind": "observation",
+      "tags": []
+    },
+    "decision": {
+      "accepted": false,
+      "reason": "index_only_block_cannot_store_records",
+      "block_id": "memory_root_index",
+      "retention": "durable",
+      "delivery_policy": "always_on",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "observation"
+      ],
+      "policy_issues": [
+        "index_only_not_record_storage"
+      ],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "decisions_and_contracts",
+      "suggested_action": "retry_remember"
+    }
+  },
+  {
+    "name": "parent",
+    "request": {
+      "name": "parent",
+      "requested_block_id": "durable_knowledge_index",
+      "kind": "observation",
+      "tags": []
+    },
+    "decision": {
+      "accepted": false,
+      "reason": "index_only_block_cannot_store_records",
+      "block_id": "durable_knowledge_index",
+      "retention": "durable",
+      "delivery_policy": "on_demand",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "observation"
+      ],
+      "policy_issues": [
+        "index_only_not_record_storage"
+      ],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "decisions_and_contracts",
+      "suggested_action": "retry_remember"
+    }
+  },
+  {
+    "name": "directive",
+    "request": {
+      "name": "directive",
+      "requested_block_id": "workspace_core_directives",
+      "kind": "observation",
+      "tags": []
+    },
+    "decision": {
+      "accepted": false,
+      "reason": "agent_write_requires_typed_promotion_route",
+      "block_id": "workspace_core_directives",
+      "retention": "durable",
+      "delivery_policy": "always_on",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "observation"
+      ],
+      "policy_issues": [
+        "typed_promotion_route_required"
+      ],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "decisions_and_contracts",
+      "suggested_action": "retry_remember"
+    }
+  },
+  {
+    "name": "verified",
+    "request": {
+      "name": "verified",
+      "requested_block_id": "verified_lessons",
+      "kind": "lesson",
+      "tags": []
+    },
+    "decision": {
+      "accepted": false,
+      "reason": "verified_lesson_requires_typed_promotion",
+      "block_id": "verified_lessons",
+      "retention": "durable",
+      "delivery_policy": "on_demand",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "lesson"
+      ],
+      "policy_issues": [
+        "typed_verification_and_tribunal_required"
+      ],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "reflection_candidates",
+      "suggested_action": "retry_remember"
+    }
+  },
+  {
+    "name": "unknown",
+    "request": {
+      "name": "unknown",
+      "requested_block_id": "missing",
+      "kind": "observation",
+      "tags": []
+    },
+    "decision": {
+      "accepted": false,
+      "reason": "unknown_requested_block",
+      "block_id": "missing",
+      "retention": "durable",
+      "delivery_policy": "on_demand",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "observation"
+      ],
+      "policy_issues": [
+        "unknown_logical_block_id"
+      ],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "",
+      "suggested_action": ""
+    }
+  },
+  {
+    "name": "empty",
+    "request": {
+      "name": "empty",
+      "requested_block_id": "",
+      "kind": "observation",
+      "tags": []
+    },
+    "decision": {
+      "accepted": false,
+      "reason": "requested_block_id_required",
+      "block_id": "",
+      "retention": "durable",
+      "delivery_policy": "on_demand",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "observation"
+      ],
+      "policy_issues": [
+        "requested_block_id_required"
+      ],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "",
+      "suggested_action": ""
+    }
+  },
+  {
+    "name": "reserved",
+    "request": {
+      "name": "reserved",
+      "requested_block_id": "stable_project_facts",
+      "kind": "observation",
+      "tags": [],
+      "metadata": {
+        "promotion_gate": "tribunal_accept"
+      }
+    },
+    "decision": {
+      "accepted": false,
+      "reason": "reserved_metadata_governance_field",
+      "block_id": "stable_project_facts",
+      "retention": "durable",
+      "delivery_policy": "on_demand",
+      "temperature": "warm",
+      "authority": "advisory",
+      "scope": "workspace",
+      "trust_level": "agent_reported",
+      "verification_status": "unverified",
+      "verification_methods": [],
+      "promotion_decision": "not_requested",
+      "status": "candidate",
+      "tags": [
+        "observation"
+      ],
+      "policy_issues": [
+        "reserved_metadata:promotion_gate"
+      ],
+      "catalog_revision_id": "catalog:sha256:674ab85ba0fa54504e71d6ce8d5d418fa91861f9500982ec45dac2b0848f2493",
+      "suggested_block_id": "",
+      "suggested_action": ""
+    }
+  }
+]

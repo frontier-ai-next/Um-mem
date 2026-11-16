@@ -1,0 +1,23 @@
+title = "UM-MEM source secret scan"
+
+[extend]
+useDefault = true
+
+# Keep all default detectors. These exclusions apply only to public integrity
+# hashes and a deterministic test identifier in their exact source locations.
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Pinned public Zvec C API library SHA-256"
+  condition = "AND"
+  paths = ['''(^|[\\/])internal[\\/]native[\\/]zvec[\\/]library_purego\.go$''']
+  regexTarget = "match"
+  regexes = ['''^(lib)?zvec_c_api\.(dll|so|dylib)",\s*"[0-9a-f]{64}"$''']
+
+  [[rules.allowlists]]
+  description = "Deterministic projection lock identifier in the parity fixture"
+  condition = "AND"
+  paths = ['''(^|[\\/])internal[\\/]native[\\/]zvec[\\/]testdata[\\/]python_contract\.json$''']
+  regexTarget = "line"
+  regexes = ['''^\s*"projection_lock_key": "[0-9a-f]{64}"\s*$''']
