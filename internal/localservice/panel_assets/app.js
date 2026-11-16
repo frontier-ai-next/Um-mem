@@ -1111,11 +1111,17 @@ function showStopped(){state.stopped=true;state.source?.close();connected(false)
 $('stop-panel').onclick=async()=>{if(state.draft?.saving){toast('Дождитесь результата сохранения.');return;}$('stop-panel').disabled=true;
   try{await api('api/stop',{});showStopped();}catch(error){$('stop-panel').disabled=false;toast(error.message);}};
 
+function treeRecordCount(snapshot){const sum=node=>Number(node.canonical_record_count||0)+(node.children||[]).reduce((total,child)=>total+sum(child),0);return (snapshot?.tree||[]).reduce((total,node)=>total+sum(node),0);}
+function treeHasBranches(snapshot){return (snapshot?.tree||[]).some(node=>(node.children||[]).length>0);}
+// Records are filed into logical blocks, which are not nodes of the block tree.
+// A store full of records can therefore render as an empty graph on first open.
+function preferredMode(){if(!state.snapshot)return state.mode;if(state.mode!=='graph')return state.mode;if(treeRecordCount(state.snapshot)>0&&!treeHasBranches(state.snapshot))return 'list';return state.mode;}
+
 async function start() {
   try {
     const token=location.hash.slice(1);if(token){history.replaceState(null,'',location.pathname+location.search);await api('auth',{token});}
     await refresh();if(!state.snapshot)throw new Error('Не удалось прочитать память. Откройте панель командой um-memory dashboard.');
-    renderSummary();setMode(state.mode);if(state.mode==='graph'&&state.block)focusGraph();
+    renderSummary();setMode(preferredMode());if(state.mode==='graph'&&state.block)focusGraph();
     if(state.snapshot.read_only){connected(true);return;}
     state.source=new EventSource(`/panel/api/events?since=${encodeURIComponent(state.snapshot.cursor)}`);
     state.source.onopen=()=>{connected(true);banner();};state.source.onerror=()=>{if(state.stopped)return;connected(false);banner('Связь потеряна. Черновик остаётся в редакторе. Если панель была остановлена, откройте её снова: um-memory dashboard.');};
