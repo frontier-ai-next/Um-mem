@@ -40,7 +40,8 @@ const k = Number(flag('k', 3))
 const asJson = flag('json', false) === true
 const allowMiss = flag('allow-miss', false) === true
 
-const questions = JSON.parse(readFileSync(join(here, 'questions.json'), 'utf8'))
+const questionsFile = String(flag('questions', 'questions.json'))
+const questions = JSON.parse(readFileSync(join(here, questionsFile), 'utf8'))
 
 async function recall(query) {
   const dir = mkdtempSync(join(tmpdir(), 'goldset-'))

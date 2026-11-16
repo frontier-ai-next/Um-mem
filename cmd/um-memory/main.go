@@ -157,7 +157,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	command := args[0]
 	switch command {
-	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "promotion-candidates", "contradictions", "consolidation", "export-jsonl", "import-jsonl", "approve", "reconcile":
+	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "promotion-candidates", "contradictions", "consolidation", "export-jsonl", "import-jsonl", "approve", "graph-report", "weave-blocks", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
 	}
@@ -1040,6 +1040,18 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return encoder.Encode(payload)
 	case "contradictions":
 		payload, err := selected.Contradictions(ctx, *conflictThreshold, *neighborLimit)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "weave-blocks":
+		payload, err := selected.WeaveBlocks(ctx, *conflictThreshold, *apply, *neighborLimit)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "graph-report":
+		payload, err := selected.GraphReport(ctx)
 		if err != nil {
 			return err
 		}

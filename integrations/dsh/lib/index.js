@@ -75,7 +75,7 @@ function extractText(content) {
 function userTail(text) {
   const paragraphs = String(text || '').split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
   const isMarker = (part) =>
-    /^(current |approval prompts|the runtime context|you are interacting|tokens prefixed|non-zero exits|use the |track every|web_search|web_fetch|cite the url|start independent|when only waiting|create_goal|only create|use the workflow|<|\[|#|\||-{3,}|\*{3,}|-\s|\*\s)/i.test(part) ||
+    /^(current |approval prompts|the runtime context|you are interacting|tokens prefixed|non-zero exits|use the |track every|web_search|web_fetch|cite the url|start independent|when only waiting|create_goal|only create|use the workflow|time sampled|browser time zone|elapsed since|<|\[|#|\||-{3,}|\*{3,}|-\s|\*\s)/i.test(part) ||
     /runtime-context snapshots|this snapshot supersedes|deepseek harness web gui url|\(block=|tags=|\bblock=/i.test(part)
   const plain = paragraphs.filter((part) => !isMarker(part))
   // No plain paragraph means the message carried only harness context: better to
@@ -191,6 +191,13 @@ export function apply(ctx, rawConfig = {}) {
         return
       }
       const tailText = userTail(text)
+      // The host emits several user/message events per turn (the real message,
+      // then reminders). The first substantial one is the question; letting later
+      // events overwrite it stored a reminder as the episode.
+      if (turn.user) {
+        logEvent('session/event', { type: 'user/message', text: text.length, captured: tailText.length, ignored: true })
+        return
+      }
       logEvent('session/event', { type: 'user/message', text: text.length, captured: tailText.length })
       turn = { user: tailText, tools: [], startedAt: Date.now() }
       void refreshFocus()
