@@ -585,6 +585,30 @@ export function apply(ctx, rawConfig = {}) {
       },
     },
     {
+      name: 'um_mem_approve',
+      description: 'Подтвердить запись как человек: добавляет свидетельство human_approval через amend. Это сигнал для ревью промоушена, а не обход tribunal — директива по-прежнему требует отдельного решения.',
+      parameters: {
+        type: 'object',
+        properties: {
+          record_id: { type: 'string', description: 'id записи (mem_…).' },
+          note: { type: 'string', description: 'Почему запись подтверждена.' },
+        },
+        required: ['record_id'],
+      },
+      output: toolOutput(),
+      async execute(args = {}) {
+        const recordId = String(args.record_id ?? '').trim()
+        if (!recordId) throw new Error('um_mem_approve: record_id is required')
+        const note = String(args.note ?? '').trim()
+        const argv = ['approve', ...commonArgs(config), '--record-id', recordId, '--approver', config.userId || 'operator']
+        if (note) argv.push('--note', note)
+        const payload = await runCli(config, argv)
+        return payload.approved
+          ? 'approve: ok | record=' + payload.record_id + ' | evidence=' + payload.evidence_count
+          : 'approve: уже подтверждено этим оператором'
+      },
+    },
+    {
       name: 'um_mem_stats',
       description: 'Метрики зрелости памяти: сколько записей живёт, как они распределены по блокам и видам, какая доля подтверждена (promoted), связана рёбрами и размечена метками. Гигиену (дубли, мусор) показывает линтер, а это — «взрослеет ли память».',
       parameters: { type: 'object', properties: {} },

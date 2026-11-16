@@ -242,16 +242,12 @@ func share(part, total int) float64 {
 // Retraction is modelled as a successor record plus a `supersedes` edge, so the
 // original keeps its candidate status and only the edge marks it as withdrawn.
 func retractedTargets(records []memory.MemoryRecord, edges []memory.EdgeRecord) map[string]bool {
-	status := make(map[string]string, len(records))
-	for _, record := range records {
-		status[record.BlockID] = record.Status
-	}
 	targets := map[string]bool{}
 	for _, edge := range edges {
-		if edge.EdgeType != "supersedes" {
-			continue
-		}
-		if status[edge.SrcID] == "retracted" || status[edge.SrcID] == "superseded" {
+		// Any supersedes edge retires its target: an amendment replaces the old
+		// revision just as a retraction does, and both leave the original record
+		// with its candidate status.
+		if edge.EdgeType == "supersedes" {
 			targets[edge.DstID] = true
 		}
 	}
