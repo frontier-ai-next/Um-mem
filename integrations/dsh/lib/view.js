@@ -106,6 +106,10 @@ export function renderWriteResult(payload, { verb }) {
   if (decision.suggested_block_id) bits.push('suggested_block=' + clean(decision.suggested_block_id))
   if (decision.suggested_action) bits.push('suggested_action=' + clean(decision.suggested_action))
   if (payload.receipt?.projection_pending) bits.push('projection=pending')
+  if (payload.auto_link?.linked) {
+    bits.push('auto_linked=' + clean(payload.auto_link.dst_id) + ' (' + clean(payload.auto_link.edge_type) +
+      ' ' + Number(payload.auto_link.score || 0).toFixed(2) + ')')
+  }
   return bits.join(' | ')
 }
 

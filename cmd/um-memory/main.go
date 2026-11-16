@@ -157,7 +157,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	command := args[0]
 	switch command {
-	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "reconcile":
+	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
 	}
@@ -200,6 +200,8 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	pageCursor := flags.String("cursor", "", "record-page cursor")
 	edgeTypes := flags.String("edge-types", "", "comma-separated edge types for neighbors")
 	neighborLimit := flags.Int("neighbor-limit", 12, "neighbors result limit")
+	autoLinkOn := flags.Bool("auto-link", true, "attach a related_to edge after a candidate write")
+	linkThreshold := flags.Float64("link-threshold", 0.12, "minimum lexical similarity for auto-link")
 	includeRetracted := flags.Bool("include-retracted", false, "include noncurrent record revisions in list-records")
 	mapDepth := flags.Int("depth", 1, "block-map tree depth")
 	mapIncludeMeta := flags.Bool("include-meta", false, "include protected catalog taxonomy in block-map")
@@ -879,7 +881,28 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if *autoLinkOn && result.Saved && result.RecordID != "" {
+			// Best-effort: a missing neighbour must never fail a durable write.
+			if link, linkErr := selected.AutoLink(ctx, result.RecordID, *linkThreshold); linkErr == nil {
+				result.AutoLink = link
+			}
+		}
 		return encoder.Encode(result)
+	case "auto-link":
+		if strings.TrimSpace(*recordID) == "" {
+			return errors.New("--record-id is required for auto-link")
+		}
+		payload, err := selected.AutoLink(ctx, *recordID, *linkThreshold)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "memory-stats":
+		payload, err := selected.Stats(ctx)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
 	case "put-root":
 		if strings.TrimSpace(*blockID) == "" {
 			return errors.New("--block is required for put-root")

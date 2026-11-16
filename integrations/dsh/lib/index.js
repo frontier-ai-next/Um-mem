@@ -81,6 +81,10 @@ export function apply(ctx, rawConfig = {}) {
   let focusSource = ''
   let refreshing = false
   let lastRefreshStart = 0
+  // Per-turn trace: what was asked and which tools actually ran. Without it the
+  // store only grows when the model decides to write, which is why a session of
+  // real work could leave no trace at all.
+  let turn = { user: '', tools: [], startedAt: 0 }
 
   function renderFocusFrom(records) {
     if (!config.inject) return ''
@@ -143,6 +147,7 @@ export function apply(ctx, rawConfig = {}) {
       if (!event || event.type !== 'user/message') return
       const text = extractText(event.data?.content ?? event.data?.message?.content) || extractText(event.message?.content)
       if (!text) return
+      turn = { user: text.slice(0, 400), tools: [], startedAt: Date.now() }
       void refreshFocus()
       if (!config.inject) return
       // Best-effort semantic recall for this turn; the block shows up from the
@@ -200,6 +205,54 @@ export function apply(ctx, rawConfig = {}) {
     })
   } catch (error) {
     ctx.logger?.debug?.('[dsh-um-mem] no pre-step hook: ' + String(error))
+  }
+
+  async function recordEpisode() {
+    const snapshot = turn
+    turn = { user: '', tools: [], startedAt: 0 }
+    if (!snapshot.user || snapshot.tools.length === 0) return
+    const minutes = snapshot.startedAt ? Math.max(1, Math.round((Date.now() - snapshot.startedAt) / 60000)) : 0
+    const content = 'Раунд: запрос «' + snapshot.user.slice(0, 220) + '»; инструменты: ' +
+      snapshot.tools.slice(0, 8).join(', ') + (minutes ? '; ~' + minutes + ' мин' : '')
+    try {
+      await runWithRequest(config, 'remember-candidate', {
+        operation_id: operationId(),
+        content,
+        title: 'Эпизод: ' + snapshot.user.slice(0, 60),
+        kind: 'episode',
+        tags: ['episode', 'turn'],
+        requested_block_id: 'workspace_episodes',
+        evidence_kind: 'tool_output',
+        ...(config.userId ? { user_id: config.userId } : {}),
+      })
+      void refreshFocus()
+    } catch (error) {
+      ctx.logger?.debug?.('[dsh-um-mem] episode capture failed: ' + String(error?.message || error))
+    }
+  }
+
+  try {
+    ctx.on('tools/result', (exec) => {
+      const toolName = typeof exec?.name === 'string' ? exec.name : ''
+      if (!toolName || toolName.startsWith('um_mem_')) return
+      if (!turn.tools.includes(toolName)) turn.tools.push(toolName)
+    })
+  } catch {
+    /* host without tool results */
+  }
+
+  try {
+    ctx.on('agent/turn-stopping', (...args) => {
+      try {
+        void recordEpisode()
+      } catch {
+        /* capture must never break the turn */
+      }
+      const next = args[args.length - 1]
+      return typeof next === 'function' ? next() : undefined
+    })
+  } catch (error) {
+    ctx.logger?.debug?.('[dsh-um-mem] no turn-stopping hook: ' + String(error))
   }
 
   disposers.push(ctx.systemPrompt.section({ name: 'dsh:um-mem-rules', order: SECTION_ORDER, text: () => RULES }))
@@ -458,6 +511,25 @@ export function apply(ctx, rawConfig = {}) {
           '--scope-id', config.workspace,
         ])
         return renderRecall(records, { limit })
+      },
+    },
+    {
+      name: 'um_mem_stats',
+      description: 'Метрики зрелости памяти: сколько записей живёт, как они распределены по блокам и видам, какая доля подтверждена (promoted), связана рёбрами и размечена метками. Гигиену (дубли, мусор) показывает линтер, а это — «взрослеет ли память».',
+      parameters: { type: 'object', properties: {} },
+      output: toolOutput(),
+      async execute() {
+        const payload = await runCli(config, ['memory-stats', ...commonArgs(config)])
+        const parts = [
+          'records=' + payload.records,
+          'retracted=' + payload.retracted,
+          'promoted=' + payload.promoted + ' (' + Math.round((payload.promoted_share || 0) * 100) + '%)',
+          'linked=' + payload.linked + ' (' + Math.round((payload.linked_share || 0) * 100) + '%)',
+          'labeled=' + payload.labeled + ' (' + Math.round((payload.labeled_share || 0) * 100) + '%)',
+          'edges=' + payload.edges,
+        ]
+        const blocks = Object.entries(payload.blocks || {}).map(([name, count]) => name + '=' + count).join(', ')
+        return parts.join(' | ') + '\nблоки: ' + blocks
       },
     },
     {
