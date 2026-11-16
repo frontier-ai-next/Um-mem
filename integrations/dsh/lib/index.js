@@ -263,6 +263,7 @@ export function apply(ctx, rawConfig = {}) {
           tags: { type: 'string', description: 'Теги через запятую (опционально).' },
           block: { type: 'string', description: 'Логический блок (по умолчанию stable_project_facts).' },
           evidence_kind: { type: 'string', description: 'Откуда факт: user_statement, tool_output, file_read, agent_inference. По умолчанию agent_inference.' },
+          metadata: { type: 'string', description: 'Опциональные метки записи как JSON-объект, например {"source":"repo","confidence":"high"}. Служебные ключи (status, authority, scope, retention…) зарезервированы и будут отклонены.' },
         },
         required: ['content'],
       },
@@ -284,9 +285,56 @@ export function apply(ctx, rawConfig = {}) {
           evidence_kind: String(args.evidence_kind ?? '').trim() || 'agent_inference',
         }
         if (config.userId) payload.user_id = config.userId
+        const rawMeta = String(args.metadata ?? '').trim()
+        if (rawMeta) {
+          try {
+            const parsed = JSON.parse(rawMeta)
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload.metadata = parsed
+          } catch {
+            throw new Error('um_mem_remember: metadata must be a JSON object')
+          }
+        }
         const result = await runWithRequest(config, 'remember-candidate', payload)
         void refreshFocus()
         return renderWriteResult(result, { verb: 'remember' })
+      },
+    },
+    {
+      name: 'um_mem_link',
+      description: 'Связать две записи типизированным ребром. Граф памяти держится на таких рёбрах: derived_from (вывод из записи), supports (подтверждает), implements (реализует), cites (ссылается), related_to (по теме), verified_by (проверено), tests (тестирует), contains (входит в). Нужны id обеих записей; свидетельство подставляется автоматически.',
+      parameters: {
+        type: 'object',
+        properties: {
+          src_id: { type: 'string', description: 'id записи-источника (mem_…).' },
+          dst_id: { type: 'string', description: 'id записи-цели (mem_…).' },
+          edge_type: { type: 'string', description: 'Тип ребра: derived_from, supports, implements, cites, related_to, verified_by, tests, contains.' },
+          reason: { type: 'string', description: 'Почему эти записи связаны.' },
+          evidence_id: { type: 'string', description: 'Что служит свидетельством: id вызова инструмента, теста или файла.' },
+        },
+        required: ['src_id', 'dst_id', 'edge_type'],
+      },
+      output: toolOutput(),
+      async execute(args = {}) {
+        const src = String(args.src_id ?? '').trim()
+        const dst = String(args.dst_id ?? '').trim()
+        const edgeType = String(args.edge_type ?? '').trim()
+        if (!src || !dst || !edgeType) throw new Error('um_mem_link: src_id, dst_id and edge_type are required')
+        if (src === dst) throw new Error('um_mem_link: src and dst must be different records')
+        const payload = {
+          src_id: src,
+          dst_id: dst,
+          edge_type: edgeType,
+          reason: String(args.reason ?? '').trim() || 'linked through dsh-um-mem',
+          weight: 1,
+          evidence_refs: [{
+            ref_type: 'tool_result',
+            ref_id: String(args.evidence_id ?? '').trim() || operationId(),
+            produced_by: 'agent',
+            producer_id: 'dsh-um-mem',
+          }],
+        }
+        const result = await runWithRequest(config, 'add-edge', payload)
+        return 'link: ' + (result.edge_type || edgeType) + ' | ' + src + ' → ' + dst + ' | ok=' + String(result.ok)
       },
     },
     {

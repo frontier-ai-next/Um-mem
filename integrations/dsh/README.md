@@ -13,7 +13,8 @@ The plugin is a thin adapter. It does not re-implement memory: it calls the
 | Surface | Behaviour |
 | --- | --- |
 | `um_mem_recall` | semantic recall inside one workspace scope, compact records with `id` / `rev` |
-| `um_mem_remember` | writes an advisory candidate into a logical block |
+| `um_mem_remember` | writes an advisory candidate into a logical block (`metadata` takes a JSON object; reserved governance keys are refused) |
+| `um_mem_link` | typed edge between two records (`derived_from`, `supports`, `implements`, `cites`, `related_to`, `verified_by`, `tests`, `contains`), evidence supplied automatically |
 | `um_mem_amend` | new revision of an existing record (`expected_revision` guards the race) |
 | `um_mem_forget` | retracts a wrong record |
 | `um_mem_read` | one full record by id |
