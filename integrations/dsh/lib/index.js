@@ -325,21 +325,27 @@ export function apply(ctx, rawConfig = {}) {
         for (const record of compact.slice(0, 2)) {
           if (!record.id) continue
           try {
-            const payload = await runCli(config, ['neighbors', ...commonArgs(config), '--record-id', record.id, '--depth', '1'])
+            const payload = await runCli(config, ['neighbors', ...commonArgs(config), '--record-id', record.id, '--depth', '2'])
             for (const neighbor of payload.neighbors || []) {
               if (known.has(neighbor.record_id)) continue
               known.add(neighbor.record_id)
               linked.push({ ...neighbor, via: record.title })
-              if (linked.length >= 4) break
             }
           } catch {
             /* a broken graph must not fail the recall itself */
           }
-          if (linked.length >= 4) break
         }
+        // Two hops are allowed, but only the strongest four survive: a budget of
+        // links is what keeps the block small enough to stay useful.
+        linked.sort((left, right) => {
+          if (left.hop !== right.hop) return left.hop - right.hop
+          return Number(right.weight || 1) - Number(left.weight || 1)
+        })
+        linked.splice(4)
         if (linked.length) {
           text += '\n\nСвязано ребром:\n' + linked
-            .map((neighbor) => '- [' + neighbor.edge_type + ' w=' + Number(neighbor.weight || 1).toFixed(2) + '] ' + neighbor.title +
+            .map((neighbor) => '- [' + neighbor.edge_type + ' w=' + Number(neighbor.weight || 1).toFixed(2) +
+              ' h' + (neighbor.hop || 1) + '] ' + neighbor.title +
               ' (id=' + neighbor.record_id + ', ' + neighbor.logical_block_id + ')' +
               (neighbor.via ? ' — через «' + neighbor.via + '»' : ''))
             .join('\n')

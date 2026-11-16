@@ -121,3 +121,19 @@ that fact with `um_mem_amend` and check the old revision is superseded.
 Remove the bundle from the profile `package.json` and delete the row that
 `cordis.patch.yml` inserted. The store is untouched: it is plain SQLite plus
 native partitions, and it stays readable by the CLI.
+
+## Change the store on a copy first
+
+Destructive maintenance is tested against a copy of the store, never against the
+live one:
+
+```console
+robocopy /MIR <store> <store>-lab      # or: cp -a
+um-memory consolidation --repo-root <store>-lab ... --apply --confirm-consolidation
+um-memory recall --repo-root <store>-lab --plan-file control.json
+```
+
+Compare the same control queries before and after on the copy; only then repeat
+the run against the live store. A retirement is stored as a successor record
+plus a `supersedes` edge, so the original keeps `status=candidate` and every
+consumer must read `withdrawn` rather than the status.
