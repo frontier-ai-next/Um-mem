@@ -157,7 +157,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	command := args[0]
 	switch command {
-	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "promotion-candidates", "contradictions", "consolidation", "export-jsonl", "import-jsonl", "approve", "graph-report", "weave-blocks", "reconcile":
+	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "promotion-candidates", "contradictions", "consolidation", "export-jsonl", "import-jsonl", "approve", "graph-report", "weave-blocks", "purge", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
 	}
@@ -205,6 +205,12 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	conflictThreshold := flags.Float64("conflict-threshold", 0.55, "minimum similarity for a contradiction pair")
 	confirmConsolidation := flags.Bool("confirm-consolidation", false, "required together with --apply: retirement is irreversible from the caller side")
 	currentOnly := flags.Bool("current-only", false, "export only records that are still in force")
+	graphHTML := flags.String("html", "", "write a standalone web view of the graph")
+	purgeIDs := flags.String("purge-ids", "", "comma separated record or revision ids to purge")
+	purgeKinds := flags.String("purge-kinds", "", "comma separated kinds to purge, e.g. episode")
+	purgeBlocks := flags.String("purge-blocks", "", "comma separated blocks to purge")
+	purgeConfirm := flags.Bool("purge-confirm", false, "required together with --apply")
+	purgeShred := flags.Bool("purge-shred", false, "delete the old store directory after a successful swap")
 	approverFlag := flags.String("approver", "", "operator identity for an approval")
 	approvalNote := flags.String("note", "", "why the record is approved")
 	facets := &scopeFlag{}
@@ -961,6 +967,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if record == nil {
+			return errors.New("record not found: " + *recordID)
+		}
 		// `block_id` on a stored record is the record identity, which reads as
 		// the logical block to every caller. Publish both names explicitly so a
 		// host does not have to know the internal naming.
@@ -1050,7 +1059,39 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return err
 		}
 		return encoder.Encode(payload)
+	case "purge":
+		if len(strings.TrimSpace(*purgeIDs)) == 0 && len(strings.TrimSpace(*purgeKinds)) == 0 && len(strings.TrimSpace(*purgeBlocks)) == 0 {
+			return errors.New("purge needs --record-id, --kind or --block")
+		}
+		request := engine.PurgeRequest{Apply: *apply, Confirm: *purgeConfirm, Shred: *purgeShred}
+		for _, part := range strings.Split(*purgeIDs, ",") {
+			if value := strings.TrimSpace(part); value != "" {
+				request.RecordIDs = append(request.RecordIDs, value)
+			}
+		}
+		for _, part := range strings.Split(*purgeKinds, ",") {
+			if value := strings.TrimSpace(part); value != "" {
+				request.Kinds = append(request.Kinds, value)
+			}
+		}
+		for _, part := range strings.Split(*purgeBlocks, ",") {
+			if value := strings.TrimSpace(part); value != "" {
+				request.Blocks = append(request.Blocks, value)
+			}
+		}
+		payload, err := selected.Purge(ctx, request)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
 	case "graph-report":
+		if strings.TrimSpace(*graphHTML) != "" {
+			payload, err := selected.GraphHTML(ctx, *graphHTML)
+			if err != nil {
+				return err
+			}
+			return encoder.Encode(payload)
+		}
 		payload, err := selected.GraphReport(ctx)
 		if err != nil {
 			return err
