@@ -334,7 +334,7 @@ async function refresh() {
   if(state.refreshing){state.pending=true;return;}
   state.refreshing=true;
   try {
-    const snapshot=await api(`api/snapshot?${scopeQuery()}`);state.snapshot=snapshot;mergeEvents(snapshot.events,snapshot.cursor);
+    const snapshot=await api(`api/snapshot?${scopeQuery()}`);state.snapshot=snapshot;mergeEvents(snapshot.events,snapshot.cursor);(function walk(list,depth){for(const b of list||[]){if(depth<=1||b.relation_count)state.contextExpanded.add(b.block_id);walk(b.children,depth+1);}})(snapshot.tree||[],0);
     if(snapshot.read_only&&snapshot.workspace_key){
       const url=new URL(location.href);
       if(url.searchParams.get('workspace')!==snapshot.workspace_key){url.searchParams.set('workspace',snapshot.workspace_key);history.replaceState(null,'',url);}
@@ -732,8 +732,8 @@ function graphModel(){
   while(ancestor?.parent_id&&!context.has(ancestor.parent_id)){context.add(ancestor.parent_id);ancestor=topic(ancestor.parent_id);}
   function branch(b,parent='',color=colorFor(b.block_id),depth=0){
     if(seen.has(b.block_id))return null;seen.add(b.block_id);
-    const cached=state.branchRecords.get(b.block_id),expanded=(state.graphFocus&&state.block?state.focusExpanded:state.expanded).has(b.block_id)&&
-      (!state.block||state.graphFocus||state.graphOverview||context.has(b.block_id)||state.contextExpanded.has(b.block_id)||b.block_id==='__overview');
+    const cached=state.branchRecords.get(b.block_id),expanded=((state.graphFocus&&state.block?state.focusExpanded:state.expanded).has(b.block_id)&&
+      (!state.block||state.graphFocus||state.graphOverview||context.has(b.block_id)||state.contextExpanded.has(b.block_id)||b.block_id==='__overview'))||(depth<=2&&!state.block)||b.relation_count>0;
     const children=(b.children||[]).filter(child=>nonempty.has(child.block_id));
     const recordsAllowed=!state.block||state.descendants||b.block_id===state.block;
     const records=recordsAllowed?cached?.records||[]:[];
@@ -742,7 +742,7 @@ function graphModel(){
     const childCount=children.length===(b.children||[]).length?counted(children.length,['блок','блока','блоков']):`${children.length} из ${b.children.length} блоков`;
     const n=sizeGraphNode({id:b.block_id,parent,title:b.name,type:'block',central:!parent,color,r:parent?27:37,archived:b.status==='archived',recordCount:blockRecordCount(b),
       expandable,expanded:expanded&&expandable,busy:state.graphBusy.has(b.block_id),subtitle:state.graphBusy.has(b.block_id)?'Загрузка…':
-        (b.status==='archived'?'Архив · ':'')+(b.children?.length?childCount+' · ':'')+counted(blockRecordCount(b),['запись','записи','записей']),children:[]});
+        (b.status==='archived'?'Архив · ':'')+(b.children?.length?childCount+' · ':'')+counted(blockRecordCount(b),['запись','записи','записей'])+(b.relation_count?' · '+b.relation_count+' связ.':'')+(b.label_share?', '+Math.round(b.label_share*100)+'% меток':''),children:[]});
     if(expanded){
       for(const child of children){
         const next=branch(child,n.id,colorFor(child.block_id),depth+1);
@@ -760,7 +760,7 @@ function graphModel(){
     }
     return n;
   }
-  const roots=state.graphFocus&&topic(state.block)?[topic(state.block)]:(state.snapshot.tree||[]).filter(b=>nonempty.has(b.block_id));
+  const roots=state.graphFocus&&topic(state.block)?[topic(state.block)]:(state.snapshot.tree||[]).filter(b=>nonempty.has(b.block_id)&&blockRecordCount(b)>0);
   let root=roots.length===1?branch(roots[0]):roots.length?branch({block_id:'__overview',name:'Вся память',children:roots}):null;
   const nodes=layoutHierarchy(root,22,48);
   const visible=new Set(nodes.map(n=>n.id));
@@ -825,7 +825,7 @@ function renderGraph(){
       if(e.key==='+'||e.key==='-')e.stopPropagation();
     });scene.append(g);if(focused===n.id)g.focus({preventScroll:true});
   }
-  animateGraph(previous,before,oldNodes,oldLinks);applyTransform();if(state.fitNeeded){state.fitNeeded=false;requestAnimationFrame(()=>focusGraph());}
+  animateGraph(previous,before,oldNodes,oldLinks);applyTransform();if(state.fitNeeded){state.fitNeeded=false;requestAnimationFrame(()=>{fitGraph();fitGraph(true);});}
 }
 let graphMotion=0,cameraMotion=0;
 function animateGraph(previous,before,oldNodes,oldLinks){

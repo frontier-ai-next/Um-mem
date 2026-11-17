@@ -4,12 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/frontier-ai-next/Um-mem/internal/engine"
 	"github.com/frontier-ai-next/Um-mem/memory"
 )
+
+func blockTotal(counts map[string]int) int {
+	total := 0
+	for _, count := range counts {
+		total += count
+	}
+	return total
+}
 
 func panelSummary(record memory.MemoryRecord) map[string]any {
 	blockID := ""
@@ -20,10 +29,18 @@ func panelSummary(record memory.MemoryRecord) map[string]any {
 	if len(preview) > 240 {
 		preview = preview[:240]
 	}
+	labeled := false
+	for key := range record.Metadata {
+		if !strings.HasPrefix(key, "um.") {
+			labeled = true
+			break
+		}
+	}
 	return map[string]any{"record_id": record.BlockID, "revision_id": record.RevisionID,
 		"revision_of": record.RevisionOf, "title": record.Title, "preview": string(preview),
 		"kind": record.Kind, "status": record.Status, "recorded_at": record.RecordedAt,
-		"logical_block_id": blockID, "tags": record.Tags, "authority": record.Authority}
+		"logical_block_id": blockID, "tags": record.Tags, "authority": record.Authority,
+		"labeled": labeled}
 }
 
 func panelScope(identity Identity, scope, scopeID string) (string, string, error) {
@@ -86,9 +103,96 @@ func (panel *Panel) snapshot(ctx context.Context, server *Server, scope, scopeID
 		return nil, err
 	}
 	summaries := make([]map[string]any, 0, len(records))
+	blockOfRecord := make(map[string]string, len(records))
+	labeledOfBlock := map[string]int{}
+	countOfBlock := map[string]int{}
 	for _, record := range records {
-		summaries = append(summaries, panelSummary(record))
+		summary := panelSummary(record)
+		summaries = append(summaries, summary)
+		block, _ := summary["logical_block_id"].(string)
+		if block == "" {
+			continue
+		}
+		blockOfRecord[record.BlockID] = block
+		countOfBlock[block]++
+		if labeled, _ := summary["labeled"].(bool); labeled {
+			labeledOfBlock[block]++
+		}
 	}
+	// The panel drew only a tree because nothing ever put record relations on the
+	// wire: aggregate them to block pairs and append those edges to the graph.
+	type blockPair struct{ from, to string }
+	pairs := map[blockPair]int{}
+	for _, edge := range edges {
+		src, _ := edge["src_id"].(string)
+		dst, _ := edge["dst_id"].(string)
+		from, okFrom := blockOfRecord[src]
+		to, okTo := blockOfRecord[dst]
+		if !okFrom || !okTo || from == to {
+			continue
+		}
+		key := blockPair{from: from, to: to}
+		if key.from > key.to {
+			key = blockPair{from: to, to: from}
+		}
+		pairs[key]++
+	}
+	blockEdges := make([]map[string]any, 0, len(pairs))
+	for pair, count := range pairs {
+		label := "связь"
+		if count > 1 {
+			label = fmt.Sprintf("%d связи", count)
+		}
+		blockEdges = append(blockEdges, map[string]any{"src_id": pair.from, "dst_id": pair.to,
+			"relation": label, "edge_type": "related_to", "weight": count})
+	}
+	relationCount := map[string]int{}
+	for pair, count := range pairs {
+		relationCount[pair.from] += count
+		relationCount[pair.to] += count
+	}
+	for _, block := range blocks {
+		id, _ := block["block_id"].(string)
+		if id == "" {
+			continue
+		}
+		block["relation_count"] = relationCount[id]
+		if total := countOfBlock[id]; total > 0 {
+			block["label_share"] = float64(labeledOfBlock[id]) / float64(total)
+		}
+	}
+	// The catalog tree is a routing taxonomy: its nodes carry no records, so the
+	// panel showed a tree of empty boxes. Attach the logical blocks that records
+	// actually belong to, under the first visible root, with real counts.
+	if len(tree) > 0 {
+		root := tree[0]
+		rootID, _ := root["block_id"].(string)
+		existing, _ := root["children"].([]map[string]any)
+		added := 0
+		for blockID, total := range countOfBlock {
+			if _, exists := byID[blockID]; exists || total == 0 {
+				continue
+			}
+			node := map[string]any{"block_id": blockID, "name": blockID, "parent_id": rootID,
+				"status": "active", "index_only": false, "children": []map[string]any{},
+				"canonical_record_count": total, "record_count": total, "logical": true,
+				"label_share": float64(labeledOfBlock[blockID]) / float64(total)}
+			existing = append(existing, node)
+			added++
+		}
+		root["children"] = existing
+		if added > 0 {
+			root["canonical_record_count"] = blockTotal(countOfBlock)
+		}
+	}
+	merged := make([]map[string]any, 0, len(blockEdges)+16)
+	if existing, ok := catalog["edges"].([]map[string]any); ok {
+		merged = append(merged, existing...)
+	}
+	for _, blockEdge := range blockEdges {
+		merged = append(merged, blockEdge)
+	}
+	catalog["edges"] = merged
 	server.mu.Lock()
 	bySession := make(map[string]Lineage, len(server.leases))
 	for token, entry := range server.leases {

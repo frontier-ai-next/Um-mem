@@ -87,6 +87,53 @@ func (engine *Engine) PanelCatalog(ctx context.Context, scope, scopeID string) (
 			return nil, errors.New("catalog snapshot exceeds visible tree depth")
 		}
 	}
+	// Packaged catalog blocks are routing nodes, not the blocks records live in:
+	// without this pass the panel shows a tree whose every node is empty. Attach
+	// the logical blocks that actually hold records, under the first visible root.
+	liveCounts, liveLabeled := map[string]int{}, map[string]int{}
+	if records, _, _, snapErr := engine.index.ExportGraphSnapshot(ctx); snapErr == nil {
+		for _, record := range records {
+			if record.Status == "retracted" || record.Status == "superseded" {
+				continue
+			}
+			block := ""
+			if record.BlockMembership != nil {
+				block = record.BlockMembership.PrimaryBlockID
+			}
+			if block == "" {
+				continue
+			}
+			liveCounts[block]++
+			if len(record.Metadata) > 0 {
+				liveLabeled[block]++
+			}
+		}
+	}
+	rootID := ""
+	for _, state := range states {
+		if state.Block.ParentID == "" {
+			rootID = state.Block.BlockID
+			break
+		}
+	}
+	logicalIDs := make([]string, 0, len(liveCounts))
+	for block := range liveCounts {
+		logicalIDs = append(logicalIDs, block)
+	}
+	sort.Strings(logicalIDs)
+	for _, block := range logicalIDs {
+		if seen[block] || liveCounts[block] == 0 {
+			continue
+		}
+		node := map[string]any{"block_id": block, "name": block, "parent_id": rootID,
+			"status": "active", "index_only": false, "children": []map[string]any{},
+			"canonical_record_count": liveCounts[block], "record_count": liveCounts[block],
+			"logical": true}
+		if total := liveCounts[block]; total > 0 {
+			node["label_share"] = float64(liveLabeled[block]) / float64(total)
+		}
+		flat = append(flat, node)
+	}
 	projectIDs := make([]string, 0, len(filter.projectIDs))
 	for id := range filter.projectIDs {
 		projectIDs = append(projectIDs, id)
