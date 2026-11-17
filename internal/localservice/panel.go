@@ -174,6 +174,14 @@ func (panel *Panel) Handle(writer http.ResponseWriter, request *http.Request, se
 		panelJSON(writer, http.StatusGone, map[string]any{"error": "Panel is stopped. Run um-memory dashboard."})
 		return
 	}
+	// Opening the bare port used to answer 401, which reads as "the panel is
+	// broken". Send the browser to the panel with the current token instead.
+	if request.Method == http.MethodGet && (path == "/" || path == "") {
+		if panel.accessToken != "" && panel.isActive() {
+			http.Redirect(writer, request, "/panel/#"+panel.accessToken, http.StatusFound)
+			return
+		}
+	}
 	if request.Method == http.MethodGet && (path == "/panel" || path == "/panel/") {
 		panel.serveAsset(writer, "index.html")
 		return

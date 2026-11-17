@@ -566,7 +566,7 @@ func (server *Server) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 		server.activeRequests--
 		server.mu.Unlock()
 	}()
-	if request.URL.Path == "/panel" || strings.HasPrefix(request.URL.Path, "/panel/") {
+	if request.URL.Path == "/" || request.URL.Path == "/panel" || strings.HasPrefix(request.URL.Path, "/panel/") {
 		server.mu.Lock()
 		panel, port := server.panel, server.listenerPort
 		server.mu.Unlock()
