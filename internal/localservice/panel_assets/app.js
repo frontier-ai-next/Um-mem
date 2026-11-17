@@ -721,7 +721,7 @@ function labelLines(title,max=24,maxLines=3){
 }
 function sizeGraphNode(n){
   n.lines=labelLines(n.title,n.type==='record'?28:19,2);
-  const width=n.type==='more'?170:n.type==='record'?224:200,height=n.type==='more'?44:n.type==='record'?88:72;
+  const width=n.type==='more'?170:n.type==='record'?224:200,height=n.type==='more'?44:n.type==='record'?88:(n.meta&&n.meta.length?88:72);
   n.bounds={left:-width/2,right:width/2,top:-height/2,bottom:height/2};
   return n;
 }
@@ -741,7 +741,7 @@ function graphModel(){
     const expandable=children.length>0||recordsAllowed&&(cached?matches.length>0:Number(b.canonical_record_count)>0);
     const childCount=children.length===(b.children||[]).length?counted(children.length,['блок','блока','блоков']):`${children.length} из ${b.children.length} блоков`;
     const n=sizeGraphNode({id:b.block_id,parent,title:b.name,type:'block',central:!parent,color,r:parent?27:37,archived:b.status==='archived',recordCount:blockRecordCount(b),
-      expandable,expanded:expanded&&expandable,busy:state.graphBusy.has(b.block_id),subtitle:state.graphBusy.has(b.block_id)?'Загрузка…':
+      expandable,expanded:expanded&&expandable,busy:state.graphBusy.has(b.block_id),meta:b.meta||[],subtitle:state.graphBusy.has(b.block_id)?'Загрузка…':
         (b.status==='archived'?'Архив · ':'')+(b.children?.length?childCount+' · ':'')+counted(blockRecordCount(b),['запись','записи','записей'])+(b.relation_count?' · '+b.relation_count+' связ.':'')+(b.label_share?', '+Math.round(b.label_share*100)+'% меток':''),children:[]});
     if(expanded){
       for(const child of children){
@@ -806,6 +806,8 @@ function renderGraph(){
     if(n.type==='block'){
       n.lines.forEach((line,i)=>g.append(svg('text',{class:'node-title',x:-82,y:-8+i*17},line)));
       g.append(svg('text',{class:'node-caption',x:-82,y:24},(n.archived?'Архив · ':'')+counted(n.recordCount,['запись','записи','записей'])));
+      if(n.meta&&n.meta.length)g.append(svg('text',{class:'node-caption',x:-82,y:40},n.meta.join(' · ')));
+      if(n.meta&&n.meta.length)g.append(svg('text',{class:'node-caption',x:-82,y:40},n.meta.join(' · ')));
       if(n.expandable)g.append(svg('circle',{class:'node-toggle','data-toggle':n.id,cx:83,cy:21,r:10}),svg('text',{class:'node-toggle-label',x:83,y:21},n.busy?'…':n.expanded?'−':'+'));
     }else if(n.type==='record'){
       g.setAttribute('data-status',n.status||'');

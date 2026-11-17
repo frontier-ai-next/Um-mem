@@ -151,6 +151,18 @@ func (panel *Panel) snapshot(ctx context.Context, server *Server, scope, scopeID
 		relationCount[pair.from] += count
 		relationCount[pair.to] += count
 	}
+	kindOfBlock := map[string]map[string]int{}
+	for _, summary := range summaries {
+		block, _ := summary["logical_block_id"].(string)
+		kind, _ := summary["kind"].(string)
+		if block == "" || kind == "" {
+			continue
+		}
+		if kindOfBlock[block] == nil {
+			kindOfBlock[block] = map[string]int{}
+		}
+		kindOfBlock[block][kind]++
+	}
 	for _, block := range blocks {
 		id, _ := block["block_id"].(string)
 		if id == "" {
@@ -160,6 +172,42 @@ func (panel *Panel) snapshot(ctx context.Context, server *Server, scope, scopeID
 		if total := countOfBlock[id]; total > 0 {
 			block["label_share"] = float64(labeledOfBlock[id]) / float64(total)
 		}
+		// Blocks carry governance labels (retention, temperature, authority) and a
+		// mix of record kinds; the panel showed none of them, so a block looked like
+		// a bare folder instead of "research that lives long".
+		chips := make([]string, 0, 6)
+		if retention, ok := block["retention"].(string); ok && retention != "" {
+			chips = append(chips, retention)
+		}
+		if temperature, ok := block["temperature"].(string); ok && temperature != "" {
+			chips = append(chips, temperature)
+		}
+		if trust, ok := block["trust"].(string); ok && trust != "" {
+			chips = append(chips, trust)
+		}
+		if blockType, ok := block["block_type"].(string); ok && blockType != "" && blockType != "semantic_leaf" {
+			chips = append(chips, blockType)
+		}
+		if kinds := kindOfBlock[id]; len(kinds) > 0 {
+			type pair struct {
+				name  string
+				count int
+			}
+			ordered := make([]pair, 0, len(kinds))
+			for name, count := range kinds {
+				ordered = append(ordered, pair{name: name, count: count})
+			}
+			sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].count > ordered[j].count })
+			top := make([]string, 0, 2)
+			for index, item := range ordered {
+				if index == 2 {
+					break
+				}
+				top = append(top, fmt.Sprintf("%s×%d", item.name, item.count))
+			}
+			chips = append(chips, strings.Join(top, ", "))
+		}
+		block["meta"] = chips
 	}
 	// The catalog tree is a routing taxonomy: its nodes carry no records, so the
 	// panel showed a tree of empty boxes. Attach the logical blocks that records
