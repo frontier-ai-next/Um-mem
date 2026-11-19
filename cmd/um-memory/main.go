@@ -139,6 +139,7 @@ const usageText = `um-memory — локальный рантайм памяти 
 Обслуживание:
   reconcile [--dry-run|--apply]           повтор нативных проекций
   dashboard [--no-browser|--stop]         локальная панель
+  agent-topics --request-file FILE       поиск или создание смысловой ветки
   install-mcp --host claude|codex|hermes  регистрация MCP-сервера
   mcp-status --host <h>
   profile-report | operator-report | observe-runtime-cost | rebuild-indexes
@@ -157,6 +158,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	command := args[0]
 	switch command {
+	case "dsh-focus", "agent-topics":
 	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "promotion-candidates", "contradictions", "consolidation", "export-jsonl", "import-jsonl", "approve", "graph-report", "weave-blocks", "purge", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
@@ -355,7 +357,40 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return err
 	}
 	defer selected.Close()
+	if command == "dsh-focus" {
+		var request dshFocusRequest
+		if err := readJSONFile(*requestFile, &request); err != nil {
+			return err
+		}
+		result, err := dshFocus(ctx, selected, request)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(result)
+	}
 	switch command {
+	case "agent-topics":
+		var request struct {
+			Query string   `json:"query"`
+			Limit int      `json:"limit"`
+			Path  []string `json:"path"`
+			About string   `json:"about"`
+		}
+		if err := readJSONFile(*requestFile, &request); err != nil {
+			return err
+		}
+		if request.Path == nil {
+			topics, err := selected.AgentTopics(request.Query, request.Limit)
+			if err != nil {
+				return err
+			}
+			return encoder.Encode(topics)
+		}
+		topic, err := selected.EnsureAgentTopic(ctx, request.Path, request.About)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(topic)
 	case "observe-runtime-cost":
 		var request ummem.RuntimeCostObservation
 		if err := readJSONFile(*requestFile, &request); err != nil {

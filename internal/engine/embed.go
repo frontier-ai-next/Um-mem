@@ -33,8 +33,6 @@ type embedStore struct {
 	path   string
 }
 
-var embedCache = &embedStore{byHash: map[string][]float32{}}
-
 func embedConfigFromEnv() embedConfig {
 	config := embedConfig{
 		URL:   strings.TrimSpace(os.Getenv("UM_MEM_EMBED_URL")),
@@ -67,10 +65,9 @@ func embedConfigFromEnv() embedConfig {
 	return config
 }
 
-func embeddingHash(text string) string {
+func embeddingHash(text string, config embedConfig) string {
 	hasher := fnv.New64a()
-	_, _ = hasher.Write([]byte(text))
-	hasher.Write([]byte(embedConfigFromEnv().Model))
+	_, _ = hasher.Write([]byte(config.URL + "\x00" + config.Model + "\x00" + text))
 	return strconvUint(hasher.Sum64())
 }
 
@@ -135,13 +132,14 @@ func embedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	return out, nil
 }
 
-func (store *embedStore) load(storePath string) {
+func (store *embedStore) load(path string) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if store.path != "" {
 		return
 	}
-	store.path = filepath.Join(storePath, ".UM-MEM", "embeddings.jsonl")
+	store.path = path
+	store.byHash = make(map[string][]float32)
 	file, err := os.Open(store.path)
 	if err != nil {
 		return
@@ -160,6 +158,13 @@ func (store *embedStore) load(storePath string) {
 			store.byHash[line.Hash] = line.Vec
 		}
 	}
+}
+
+func (store *embedStore) get(hash string) ([]float32, bool) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	vector, ok := store.byHash[hash]
+	return vector, ok
 }
 
 func (store *embedStore) persist(hash string, vec []float32) {
@@ -187,55 +192,74 @@ func (store *embedStore) persist(hash string, vec []float32) {
 	_, _ = file.Write(append(payload, '\n'))
 }
 
-// embedScores returns cosine similarity for the query against every record that
-// already has a vector. Missing records are filled on demand, capped so a recall
-// never blocks on a large backfill.
-func (engine *Engine) embedScores(ctx context.Context, query string, records []memory.MemoryRecord) map[string]float64 {
+// embedScores uses every available vector. Cold stores backfill in bounded
+// batches. The persisted vectors allow subsequent recalls to continue backfill.
+func (engine *Engine) embedScores(ctx context.Context, query string, records []memory.MemoryRecord, exhaustive bool) map[string]float64 {
 	config := embedConfigFromEnv()
 	if config.URL == "" || strings.TrimSpace(query) == "" {
 		return nil
 	}
-	embedCache.load(engine.config.RepoRoot)
-
-	missing := make([]memory.MemoryRecord, 0, 64)
-	missingText := make([]string, 0, 64)
-	for _, record := range records {
-		text := strings.TrimSpace(record.Title + ". " + record.Content)
-		hash := embeddingHash(text)
-		if _, ok := embedCache.byHash[hash]; ok {
-			continue
-		}
-		if len(missing) >= 32 {
-			break
-		}
-		missing = append(missing, record)
-		missingText = append(missingText, text)
-	}
-	if len(missingText) > 0 {
-		vectors, err := embedTexts(ctx, missingText)
-		if err == nil {
-			for i, vector := range vectors {
-				if len(vector) > 0 {
-					embedCache.persist(embeddingHash(missingText[i]), vector)
-				}
-			}
-		}
-	}
-
+	cache := &engine.embeddings
+	profile := embeddingHash(engine.config.ProfileID, config)
+	cache.load(filepath.Join(filepath.Dir(engine.indexPath), "embeddings-"+profile+".jsonl"))
+	ctx, cancel := context.WithTimeout(ctx, 3500*time.Millisecond)
+	defer cancel()
 	queryVector, err := embedTexts(ctx, []string{strings.TrimSpace(query)})
 	if err != nil || len(queryVector) == 0 || len(queryVector[0]) == 0 {
 		return nil
 	}
+
+	maxBackfill := 32
+	if exhaustive {
+		maxBackfill = 256
+	}
+	missing := make([]string, 0, min(len(records), maxBackfill))
+	missingText := make([]string, 0, cap(missing))
+	requested := make(map[string]bool)
+	for _, record := range records {
+		text := embeddingText(record)
+		hash := embeddingHash(text, config)
+		if _, ok := cache.get(hash); ok || requested[hash] {
+			continue
+		}
+		if len(missing) >= maxBackfill {
+			break
+		}
+		requested[hash] = true
+		missing = append(missing, hash)
+		missingText = append(missingText, text)
+	}
+	for start := 0; start < len(missingText) && ctx.Err() == nil; start += 32 {
+		end := min(start+32, len(missingText))
+		vectors, err := embedTexts(ctx, missingText[start:end])
+		if err != nil {
+			break
+		}
+		for i, vector := range vectors {
+			if len(vector) == len(queryVector[0]) {
+				cache.persist(missing[start+i], vector)
+			}
+		}
+	}
 	scores := make(map[string]float64, len(records))
 	for _, record := range records {
-		hash := embeddingHash(strings.TrimSpace(record.Title + ". " + record.Content))
-		vector, ok := embedCache.byHash[hash]
+		hash := embeddingHash(embeddingText(record), config)
+		vector, ok := cache.get(hash)
 		if !ok || len(vector) != len(queryVector[0]) {
 			continue
 		}
 		scores[record.BlockID] = cosine(queryVector[0], vector)
 	}
 	return scores
+}
+
+func embeddingText(record memory.MemoryRecord) string {
+	text := strings.TrimSpace(record.Title + ". " + record.Content)
+	if len(text) <= 1800 {
+		return text
+	}
+	runes := []rune(text)
+	return string(runes[:min(1800, len(runes))])
 }
 
 func cosine(left, right []float32) float64 {

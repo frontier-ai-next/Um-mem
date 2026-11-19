@@ -35,3 +35,5 @@ public/
 
 npm/*.tgz
 integrations/dsh/um-mem.config.json
+/integrations/dsh/skills/organize-memory-topology/
+/npm/skills/organize-memory-topology/

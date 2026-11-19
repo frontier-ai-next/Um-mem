@@ -173,6 +173,7 @@ func (engine *Engine) PanelRecordEdges(ctx context.Context, records []memory.Mem
 	if err != nil {
 		return nil, false, err
 	}
+	candidates = append(candidates, panelSourceEdges(records, 129-len(candidates))...)
 	truncated := len(candidates) > 128
 	if truncated {
 		candidates = candidates[:128]
@@ -224,6 +225,52 @@ func (engine *Engine) PanelRecordEdges(ctx context.Context, records []memory.Mem
 		bytesUsed += len(raw)
 	}
 	return result, truncated, nil
+}
+
+// Reflect stored provenance between visible notes and quotations in the panel.
+// This projection does not create semantic links or change recall.
+func panelSourceEdges(records []memory.MemoryRecord, limit int) []memory.EdgeRecord {
+	type sourceKey struct{ workspace, profile, scope, producer, id, hash string }
+	keyFor := func(record memory.MemoryRecord, ref memory.EvidenceRef) (sourceKey, bool) {
+		scope, err := record.ScopeKey()
+		if err != nil || ref.RefType != "message" || ref.ProducedBy != "human" || ref.RefID == "" || ref.ProducerID == "" {
+			return sourceKey{}, false
+		}
+		hash := ""
+		if ref.Hash != nil {
+			hash = *ref.Hash
+		}
+		return sourceKey{record.WorkspaceID, record.ProfileID, scope, ref.ProducerID, ref.RefID, hash}, true
+	}
+	quotes := make(map[sourceKey]string)
+	for _, record := range records {
+		if record.Kind != "source_excerpt" {
+			continue
+		}
+		for _, ref := range record.EvidenceRefs {
+			if key, ok := keyFor(record, ref); ok && quotes[key] == "" {
+				quotes[key] = record.BlockID
+			}
+		}
+	}
+	var edges []memory.EdgeRecord
+	for _, record := range records {
+		if record.Kind == "source_excerpt" {
+			continue
+		}
+		for _, ref := range record.EvidenceRefs {
+			if len(edges) >= limit {
+				return edges
+			}
+			if key, ok := keyFor(record, ref); ok && quotes[key] != "" {
+				edges = append(edges, memory.EdgeRecord{
+					SrcID: record.BlockID, DstID: quotes[key], WorkspaceID: record.WorkspaceID,
+					EdgeType: "cites", Reason: "Ссылка на исходную реплику", Weight: "1", EvidenceRefs: []memory.EvidenceRef{ref},
+				})
+			}
+		}
+	}
+	return edges
 }
 
 func trimPanelText(value string, limit int) string {

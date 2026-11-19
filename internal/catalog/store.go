@@ -27,10 +27,11 @@ const SchemaVersion = 2
 var schemaSQL string
 
 type Store struct {
-	db          *sql.DB
-	path        string
-	workspaceID string
-	profileID   string
+	maskBaseBlocks map[string]bool
+	db             *sql.DB
+	path           string
+	workspaceID    string
+	profileID      string
 }
 
 type BlockState struct {

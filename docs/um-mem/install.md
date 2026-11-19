@@ -11,7 +11,7 @@ matching `v<package version>` release containing verified binaries for your
 operating system and architecture:
 
 ```console
-npm install -g https://github.com/frontier-ai-next/Um-mem/releases/download/v0.7.0/um-mem-cli-0.7.0.tgz
+npm install -g https://github.com/frontier-ai-next/Um-mem/releases/download/v0.7.1/um-mem-cli-0.7.1.tgz
 um-memory install
 ```
 

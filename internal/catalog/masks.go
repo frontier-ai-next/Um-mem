@@ -167,6 +167,10 @@ func (store *Store) BlockHasActiveMaskReference(ctx context.Context, blockID str
 	return false, nil
 }
 
+// SetMaskBaseBlocks adds concrete, immutable blocks supplied by the host's
+// trusted catalog. A writable topology row always takes precedence.
+func (store *Store) SetMaskBaseBlocks(blocks map[string]bool) { store.maskBaseBlocks = blocks }
+
 func (store *Store) ValidateMaskBlocks(ctx context.Context, mask memory.ActiveMemoryMask) error {
 	if len(mask.SelectedBlockIDs) == 0 {
 		return errors.New("active memory mask requires selected_block_ids")
@@ -177,6 +181,9 @@ func (store *Store) ValidateMaskBlocks(ctx context.Context, mask memory.ActiveMe
 			return err
 		}
 		if state == nil {
+			if store.maskBaseBlocks[id] {
+				continue
+			}
 			return fmt.Errorf("active memory mask references block %q outside this profile", id)
 		}
 		if state.Status != "active" {
@@ -243,6 +250,9 @@ func (store *Store) ActivateMask(ctx context.Context, mask memory.ActiveMemoryMa
 			err := conn.QueryRowContext(ctx, `SELECT status FROM topology_blocks
 				WHERE workspace_id=? AND profile_id=? AND block_id=?`, store.workspaceID, store.profileID, blockID).Scan(&status)
 			if err == sql.ErrNoRows {
+				if store.maskBaseBlocks[blockID] {
+					continue
+				}
 				return errors.New("active memory mask references blocks outside this profile")
 			}
 			if err != nil {
@@ -355,6 +365,9 @@ func (store *Store) AmendMaskForScope(ctx context.Context, change MaskAmendment)
 			err := conn.QueryRowContext(ctx, `SELECT status FROM topology_blocks
 				WHERE workspace_id=? AND profile_id=? AND block_id=?`, store.workspaceID, store.profileID, blockID).Scan(&status)
 			if err == sql.ErrNoRows {
+				if store.maskBaseBlocks[blockID] {
+					continue
+				}
 				return errors.New("active memory mask references blocks outside this profile")
 			}
 			if err != nil {

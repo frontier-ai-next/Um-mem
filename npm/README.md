@@ -3,6 +3,11 @@
 Node launchers for the UM-MEM Go engine, MCP server, local service and Hermes
 hook. The npm package contains no Python runtime.
 
+The package includes `skills/organize-memory-topology/SKILL.md` for agents
+using UM-MEM over MCP, the CLI or an adapter. Install that folder in the
+agent host's skill directory to expose it. The skill uses the host's
+existing tools and lets the agent choose the topic names and structure.
+
 ## Install
 
 Node.js 18 or newer is required for the launchers. The public release contains
@@ -10,7 +15,7 @@ four prebuilt Go binaries for Windows, Linux and macOS on amd64 and arm64.
 The installer verifies their SHA-256 checksums before activating them.
 
 ```console
-npm install -g https://github.com/frontier-ai-next/Um-mem/releases/download/v0.7.0/um-mem-cli-0.7.0.tgz
+npm install -g https://github.com/frontier-ai-next/Um-mem/releases/download/v0.7.1/um-mem-cli-0.7.1.tgz
 um-memory install
 ```
 

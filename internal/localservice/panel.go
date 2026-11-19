@@ -255,6 +255,8 @@ func (panel *Panel) Handle(writer http.ResponseWriter, request *http.Request, se
 		switch {
 		case request.Method == http.MethodGet && path == "/panel/api/snapshot":
 			payload, err = panel.snapshot(request.Context(), server, query.Get("scope"), query.Get("scope_id"))
+		case request.Method == http.MethodGet && path == "/panel/api/harness-context":
+			payload = map[string]any{"ok": true, "turns": harnessContext(server.identity)}
 		case request.Method == http.MethodGet && path == "/panel/api/records":
 			payload, err = panel.records(request.Context(), server, query.Get("block"),
 				query.Get("cursor"), query.Get("scope"), query.Get("scope_id"))

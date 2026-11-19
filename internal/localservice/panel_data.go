@@ -40,7 +40,7 @@ func panelSummary(record memory.MemoryRecord) map[string]any {
 		"revision_of": record.RevisionOf, "title": record.Title, "preview": string(preview),
 		"kind": record.Kind, "status": record.Status, "recorded_at": record.RecordedAt,
 		"logical_block_id": blockID, "tags": record.Tags, "authority": record.Authority,
-		"labeled": labeled}
+		"duplicate_cluster_id": record.DuplicateClusterID, "labeled": labeled}
 }
 
 func panelScope(identity Identity, scope, scopeID string) (string, string, error) {
@@ -207,7 +207,7 @@ func (panel *Panel) snapshot(ctx context.Context, server *Server, scope, scopeID
 			}
 			chips = append(chips, strings.Join(top, ", "))
 		}
-		block["meta"] = chips
+		block["chips"] = chips
 	}
 	// The catalog tree is a routing taxonomy: its nodes carry no records, so the
 	// panel showed a tree of empty boxes. Attach the logical blocks that records

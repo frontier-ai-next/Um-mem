@@ -89,7 +89,7 @@ func TestNativeSearchDoesNotLimitBeforeFilteringHistoricalRows(t *testing.T) {
 	if currentRank <= 64 {
 		t.Fatalf("test setup did not place current row beyond the old native limit: rank=%d", currentRank)
 	}
-	rows, err := searchNative(ctx, db, partition, "needle", 64)
+	rows, err := searchNative(ctx, db, partition, "needle", 64, false)
 	if err != nil || len(rows) != 1 || rows[0].ID != partition.records["current-record"].NativeID {
 		t.Fatalf("historical native rows displaced the current projection: %+v, %v", rows, err)
 	}

@@ -33,15 +33,16 @@ type Config struct {
 }
 
 type Engine struct {
-	config    Config
-	indexPath string
-	refreshMu sync.Mutex
-	current   atomic.Pointer[catalogSnapshot]
-	index     *store.Index
-	topology  *catalog.Store
-	writer    *store.Writer
-	projector store.NativeProjector
-	recaller  nativeRecaller
+	config     Config
+	indexPath  string
+	refreshMu  sync.Mutex
+	current    atomic.Pointer[catalogSnapshot]
+	index      *store.Index
+	topology   *catalog.Store
+	writer     *store.Writer
+	projector  store.NativeProjector
+	recaller   nativeRecaller
+	embeddings embedStore
 }
 
 type catalogSnapshot struct {
@@ -413,20 +414,43 @@ func (engine *Engine) Recall(ctx context.Context, plan memory.RecallPlan) (recor
 	// `um.*` facets address record metadata, not indexed retrieval terms: keep
 	// them out of term matching and apply them as an exact filter afterwards.
 	metaFacets := make(map[string][]string, len(plan.Facets))
+	indexedFacets := make(map[string][]string, len(plan.Facets))
 	for key, values := range plan.Facets {
 		if strings.HasPrefix(key, "um.") {
 			metaFacets[key] = values
-			delete(plan.Facets, key)
+		} else {
+			indexedFacets[key] = values
 		}
 	}
-	records, err = engine.recaller.Recall(ctx, engine.index, plan)
+	plan.Facets = indexedFacets
+	nativeRecall := engine.recaller.Recall
+	dense := engine.config.BackendID == "mnemosyne" && plan.RetrievalMode == "hybrid" &&
+		plan.TemporalMode == "current" && plan.AsOf == "" && plan.KnownAsOf == "" && !plan.HasExactSelectors()
+	if dense {
+		if embedConfigFromEnv().URL == "" {
+			return nil, errors.New("Mnemosyne hybrid retrieval needs a configured embedding endpoint")
+		}
+		if err := plan.Validate(); err != nil {
+			return nil, err
+		}
+		if native, ok := engine.recaller.(mnemosyne.Projector); ok {
+			nativeRecall = native.RecallForDenseRerank
+		}
+	}
+	records, err = nativeRecall(ctx, engine.index, plan)
 	if err != nil {
 		return nil, err
 	}
 	if len(metaFacets) > 0 {
 		records = filterMetadataFacets(records, metaFacets)
 	}
-	records = engine.hybridRank(ctx, plan.Query, records, plan.Limit)
+	if plan.TemporalMode == "current" && plan.AsOf == "" && plan.KnownAsOf == "" && !plan.HasExactSelectors() {
+		limit := plan.Limit
+		if dense && limit == 0 {
+			limit = 10
+		}
+		records = store.FitRecallTokenBudget(engine.hybridRank(ctx, plan.Query, records, limit, dense), plan.MaxTokens)
+	}
 	if withdrawn, werr := engine.WithdrawnIDs(ctx); werr == nil {
 		records = markWithdrawn(records, withdrawn)
 	}

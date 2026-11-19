@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/frontier-ai-next/Um-mem/internal/ledger"
@@ -451,7 +452,11 @@ func TestPromotionPrivateTargetBindsOperationToUser(t *testing.T) {
 	if err != nil || result["saved"] != true {
 		t.Fatalf("owner could not publish private copy: %+v, %v", result, err)
 	}
-	expectedHash, err := receipts.Fingerprint(publicationArguments(request, root))
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedHash, err := receipts.Fingerprint(publicationArguments(request, resolvedRoot))
 	if err != nil {
 		t.Fatal(err)
 	}

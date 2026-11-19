@@ -3,7 +3,33 @@ package engine
 import (
 	"context"
 	"testing"
+
+	"github.com/frontier-ai-next/Um-mem/memory"
 )
+
+func TestPanelSourceEdgesUseExactScopedHumanEvidence(t *testing.T) {
+	ref := memory.EvidenceRef{RefType: "message", RefID: "original-message", ProducedBy: "human", ProducerID: "host-user"}
+	quote := memory.MemoryRecord{BlockID: "quote", Kind: "source_excerpt", WorkspaceID: "alpha",
+		ProfileID: "team", Scope: "workspace", EvidenceRefs: []memory.EvidenceRef{ref}}
+	note := quote
+	note.BlockID, note.Kind = "note", "note"
+	foreign := note
+	foreign.BlockID, foreign.ProfileID = "foreign", "other"
+	mismatch := note
+	mismatch.BlockID = "unrelated"
+	differentRef := ref
+	differentRef.ProducerID = "other-user"
+	mismatch.EvidenceRefs = []memory.EvidenceRef{differentRef}
+
+	edges := panelSourceEdges([]memory.MemoryRecord{quote, note, foreign, mismatch}, 10)
+	if len(edges) != 1 || edges[0].SrcID != "note" || edges[0].DstID != "quote" ||
+		edges[0].EdgeType != "cites" || len(edges[0].EvidenceRefs) != 1 {
+		t.Fatalf("unexpected evidence projection: %+v", edges)
+	}
+	if edges := panelSourceEdges([]memory.MemoryRecord{quote, note}, 0); len(edges) != 0 {
+		t.Fatalf("projection ignored the edge budget: %+v", edges)
+	}
+}
 
 func TestPanelCatalogMergesPackagedTaxonomy(t *testing.T) {
 	ctx := context.Background()

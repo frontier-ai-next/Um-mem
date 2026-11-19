@@ -33,7 +33,11 @@ func responseError(err error, workspaceID, backendID string) map[string]any {
 // engine scope is fixed at process startup; callers cannot select another
 // workspace, profile or backend through tool arguments.
 func New(selected *engine.Engine, workspaceID, backendID string) *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: "um_mem", Version: "go-port"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "um_mem", Version: "go-port"}, &mcp.ServerOptions{
+		Instructions: "UM-MEM is advisory memory. Consult the bundled organize-memory-topology skill when available. " +
+			"Inspect existing topics with block_map, reuse a suitable leaf, and choose your own topic names " +
+			"when using create_block. Keep sources with durable notes and give remember the chosen leaf ID.",
+	})
 	addHealthTool(server, selected, workspaceID, backendID)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "read_exact_record",

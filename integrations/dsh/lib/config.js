@@ -73,17 +73,32 @@ export function resolveConfig(raw = {}) {
   const homeBin = join(home, '.um-mem', 'bin')
   const configured = binaryFor(text(env.UM_MEM_BIN, raw.binary, file.binary))
   const binary = configured || join(homeBin, EXE)
+  const compact = raw.compact ?? file.compact ?? false
+  const exactReuse = raw.exactReuse ?? file.exactReuse ?? false
+  const evidenceTools = raw.evidenceTools ?? file.evidenceTools
   return {
     binary: binaryFor(binary) || join(binary, EXE),
     store: resolve(text(env.UM_MEM_STORE, raw.store, file.store) || join(home, '.um-mem', 'store')),
     workspace: text(env.UM_MEM_WORKSPACE, raw.workspace, file.workspace) || slugFor(basename(process.cwd())),
+    projectName: (text(env.UM_MEM_PROJECT_NAME, raw.projectName, file.projectName) || basename(process.cwd()))
+      .replace(/[\s\p{Cc}]+/gu, ' ').trim().slice(0, 64),
     profile: text(env.UM_MEM_PROFILE, raw.profile, file.profile) || 'default',
     userId: text(env.UM_MEM_USER_ID, raw.userId, file.userId),
     backend: text(env.UM_MEM_BACKEND, raw.backend, file.backend) || DEFAULT_BACKEND,
+    embedUrl: text(env.UM_MEM_EMBED_URL, raw.embedUrl, file.embedUrl),
+    embedModel: text(env.UM_MEM_EMBED_MODEL, raw.embedModel, file.embedModel),
     limit: positive(raw.limit, positive(file.limit, 8)),
-    focusLimit: positive(raw.focusLimit, positive(file.focusLimit, 12)),
-    focusMaxChars: positive(raw.focusMaxChars, positive(file.focusMaxChars, 1400)),
+    focusLimit: positive(raw.focusLimit, positive(file.focusLimit, compact ? 6 : 12)),
+    focusMaxChars: positive(raw.focusMaxChars, positive(file.focusMaxChars, compact ? undefined : 1400)),
+    focusProofMaxChars: positive(raw.focusProofMaxChars, positive(file.focusProofMaxChars, 1740)),
     timeoutMs: positive(raw.timeoutMs, positive(file.timeoutMs, 30000)),
     inject: raw.inject ?? file.inject ?? true,
+    activeMask: raw.activeMask ?? file.activeMask ?? true,
+    exactReuse,
+    preserveEvidence: raw.preserveEvidence ?? file.preserveEvidence ?? (compact && exactReuse),
+    captureSources: raw.captureSources ?? file.captureSources ?? true,
+    evidenceTools: new Set(Array.isArray(evidenceTools) ? evidenceTools.filter(name =>
+      typeof name === 'string' && /^[a-z][a-z0-9_-]*$/iu.test(name)) : []),
+    compact,
   }
 }

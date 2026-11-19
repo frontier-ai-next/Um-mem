@@ -1,9 +1,33 @@
 package memory
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestCrossRunToolOutputNeedsHostReceipt(t *testing.T) {
+	record, plan := selectionFixture(t)
+	record.Retention = "durable"
+	record.Metadata = map[string]any{"evidence_kind": "tool_output"}
+	plan.RunID = "another-session"
+	now := time.Now()
+	hash := strings.Repeat("a", 64)
+	receipt := EvidenceRef{RefType: "tool_result", RefID: "game-log#4", ProducedBy: "agent", ProducerID: "observe", Hash: &hash}
+	record.EvidenceRefs = []EvidenceRef{receipt}
+	if EligibleForRecall(record, plan, now) {
+		t.Fatal("an agent-provided result crossed sessions as a host receipt")
+	}
+	record.EvidenceRefs[0].ProducedBy = "harness"
+	if !EligibleForRecall(record, plan, now) || EligibleForDirective(record, plan, now) {
+		t.Fatal("the host result did not remain advisory across sessions")
+	}
+	bad := "not-a-digest"
+	record.EvidenceRefs[0].Hash = &bad
+	if EligibleForRecall(record, plan, now) {
+		t.Fatal("a malformed receipt crossed sessions")
+	}
+}
 
 func selectionFixture(t *testing.T) (MemoryRecord, RecallPlan) {
 	t.Helper()

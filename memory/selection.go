@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -29,7 +30,9 @@ func (r MemoryRecord) isIndexOnly() bool {
 
 func (r MemoryRecord) crossRunCandidateAllowed() bool {
 	evidenceKind := strings.TrimSpace(toString(r.Metadata["evidence_kind"]))
-	return oneOf(evidenceKind, "agent_tool_claim", "user_statement", "user_stated") &&
+	backed := oneOf(evidenceKind, "agent_tool_claim", "user_statement", "user_stated") ||
+		evidenceKind == "tool_output" && slices.ContainsFunc(r.EvidenceRefs, EvidenceRef.IsHarnessToolReceipt)
+	return backed &&
 		r.Retention == "durable" && oneOf(r.Scope, "workspace", "project", "user_global") &&
 		r.Authority == "advisory" && r.TrustLevel == "agent_reported" &&
 		r.VerificationStatus == "unverified" && r.PromotionDecision == "not_requested" &&

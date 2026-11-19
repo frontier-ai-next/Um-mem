@@ -1,13 +1,27 @@
 ---
 name: organize-memory-topology
-description: Organize and evolve long-term memory by the meaning of current work. Use when inspecting or changing a semantic memory tree, graph links, block lifecycle, consolidation targets, or the active-memory mask between rounds.
+description: Organize durable memory during ordinary work. Use when a subject recurs, a fact or preference changes, or topics, links and active context need review.
 ---
 
 # Organize Memory Topology
 
-Read `docs/um-mem/memory_architecture.md` and `docs/um-mem/data_model.md` when
-the repository is available. They define the active/passive boundary and scope
-model used by this skill.
+## During ordinary work
+
+Save a short, sourced note when it can help in a later session. Choose stable topic names that describe which questions the notes answer. Start with a small number of broad blocks. A writable block owns a native storage partition and can hold many notes. Use note titles and tags for details. Create a subtopic when a body of records needs to be searched independently and that boundary is likely to last.
+
+Give an emerging topic one clear name based on the work itself. A checkout path or run ID belongs in provenance, even if it identifies where you did the work.
+
+Keep the source and history of ordinary project work together with that project. Use your own descriptive tags on notes for distinctions such as the subject, decision, or experiment. A difference in note format alone does not justify another storage partition. Describe the recurring questions that would be searched separately before opening a new topic.
+
+- A small ventilation pilot might start with one block for calibration, trial results and field changes. If the pilot later grows, calibration could merit its own block for separately finding calibration history and procedures.
+- A recurring preference for tabular status updates can sit under a topic about working with the user. A rule for a single report belongs with that report.
+- A changed decision gets a new revision with its date and evidence. Separate records can be linked when one supports or explains the other.
+
+If the host offers a topic path, one name is enough for a standalone block. Intermediate entries in a longer path are folders, and the last holds notes. In DeepSeek Harness, `um_mem_remember` defaults to the project block. Reuse an existing `block` from `um_mem_topics`, or supply a new `topic` with `topic_reason`. With standard UM-MEM tools, inspect `block_map` or `navigation_envelope`, use `create_block` where needed, then pass the leaf ID to `remember`.
+
+## When revising the tree
+
+Use the following review for deliberate topology changes. The repository's `docs/um-mem/memory_architecture.md` and `docs/um-mem/data_model.md` describe scope and active context.
 
 Inspect the existing tree, synopses, graph links, active mask, and advisory maintenance observations before changing anything.
 

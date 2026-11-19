@@ -1,0 +1,9 @@
+{
+  "name": "dsh-um-mem-project-tools",
+  "version": "0.7.1",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "engines": { "node": ">=24" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

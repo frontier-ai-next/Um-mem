@@ -46,7 +46,11 @@ export function runCli(config, args, options = {}) {
     execFile(
       config.binary,
       args,
-      { timeout, windowsHide: true, maxBuffer: MAX_BUFFER, encoding: 'utf8' },
+      { timeout, windowsHide: true, maxBuffer: MAX_BUFFER, encoding: 'utf8', env: {
+        ...process.env,
+        ...(config.embedUrl ? { UM_MEM_EMBED_URL: config.embedUrl } : {}),
+        ...(config.embedModel ? { UM_MEM_EMBED_MODEL: config.embedModel } : {}),
+      } },
       (error, stdout, stderr) => {
         if (error) {
           if (error.code === 'EPERM' || error.code === 'EACCES') {
@@ -68,7 +72,7 @@ export function runCli(config, args, options = {}) {
 }
 
 /** Run a command that takes a single JSON request/plan file. */
-export async function runWithRequest(config, command, payload, extraArgs = []) {
+export async function runWithRequest(config, command, payload, extraArgs = [], options = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'um-mem-dsh-'))
   try {
     const file = join(directory, 'request.json')
@@ -77,7 +81,7 @@ export async function runWithRequest(config, command, payload, extraArgs = []) {
     const flag = command === 'recall' ? '--plan-file' : '--request-file'
     // The `await` matters: without it the `finally` below deletes the request
     // file while the child process is still opening it.
-    return await runCli(config, [command, ...commonArgs(config), flag, file, ...extraArgs])
+    return await runCli(config, [command, ...commonArgs(config), flag, file, ...extraArgs], options)
   } finally {
     try {
       rmSync(directory, { recursive: true, force: true })

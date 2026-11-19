@@ -142,6 +142,31 @@ func truncateRecord(record memory.MemoryRecord, budget int) (memory.MemoryRecord
 	return record, true
 }
 
+// FitRecallTokenBudget applies the same packing rule to native-ranked results.
+func FitRecallTokenBudget(records []memory.MemoryRecord, budget int) []memory.MemoryRecord {
+	if budget <= 0 {
+		return records
+	}
+	result := make([]memory.MemoryRecord, 0, len(records))
+	for _, record := range records {
+		cost := recordTokenCost(record)
+		if cost > budget {
+			if len(result) > 0 {
+				continue
+			}
+			var ok bool
+			record, ok = truncateRecord(record, budget)
+			if !ok {
+				continue
+			}
+			cost = recordTokenCost(record)
+		}
+		result = append(result, record)
+		budget -= cost
+	}
+	return result
+}
+
 // RecallCanonical searches the immutable SQLite index for historical or exact
 // queries. Current broad semantic recall belongs to the selected native backend.
 func (index *Index) RecallCanonical(ctx context.Context, plan memory.RecallPlan, backendID string) ([]memory.MemoryRecord, error) {
