@@ -47,7 +47,7 @@ func ftsQuery(text string) string {
 	return strings.Join(words, " OR ")
 }
 
-func searchNative(ctx context.Context, db *sql.DB, partition recallPartition, query string, limit int) ([]nativeRow, error) {
+func searchNative(ctx context.Context, db *sql.DB, partition recallPartition, query string, limit int, includeRecent bool) ([]nativeRow, error) {
 	all, err := readNativeRows(ctx, db, "um_mem:block:"+partition.primaryBlockID)
 	if err != nil {
 		return nil, err
@@ -144,6 +144,20 @@ func searchNative(ctx context.Context, db *sql.DB, partition recallPartition, qu
 			break
 		}
 	}
+	if includeRecent && len(selected) < limit {
+		recent, err := recentNative(ctx, db, partition, byID, currentIDs, limit)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range recent {
+			if !seen[row.ID] {
+				selected = append(selected, row)
+			}
+			if len(selected) >= limit {
+				break
+			}
+		}
+	}
 	return selected, nil
 }
 
@@ -180,6 +194,16 @@ func recentNative(ctx context.Context, db *sql.DB, partition recallPartition, by
 }
 
 func (p Projector) Recall(ctx context.Context, index *store.Index, plan memory.RecallPlan) ([]memory.MemoryRecord, error) {
+	return p.recall(ctx, index, plan, false)
+}
+
+// RecallForDenseRerank enumerates verified candidates before the final result
+// limit. The engine still applies metadata facets and packs the top results.
+func (p Projector) RecallForDenseRerank(ctx context.Context, index *store.Index, plan memory.RecallPlan) ([]memory.MemoryRecord, error) {
+	return p.recall(ctx, index, plan, true)
+}
+
+func (p Projector) recall(ctx context.Context, index *store.Index, plan memory.RecallPlan, exhaustive bool) ([]memory.MemoryRecord, error) {
 	if err := plan.Validate(); err != nil {
 		return nil, err
 	}
@@ -187,11 +211,11 @@ func (p Projector) Recall(ctx context.Context, index *store.Index, plan memory.R
 	if plan.WorkspaceID != workspace || plan.ProfileID != profile {
 		return nil, errors.New("Mnemosyne recall scope differs from canonical index")
 	}
-	if plan.RetrievalMode == "hybrid" {
-		return nil, errors.New("hybrid retrieval is unsupported by Mnemosyne")
-	}
 	if plan.TemporalMode != "current" || plan.AsOf != "" || plan.KnownAsOf != "" ||
 		plan.RevisionID != "" || plan.HasExactSelectors() {
+		if plan.RetrievalMode == "hybrid" {
+			plan.RetrievalMode = "semantic"
+		}
 		return index.RecallCanonical(ctx, plan, "mnemosyne")
 	}
 	if !plan.SearchAll && len(plan.LogicalBlockIDs) == 0 {
@@ -260,6 +284,9 @@ func (p Projector) Recall(ctx context.Context, index *store.Index, plan memory.R
 	if limit == 0 {
 		limit = 10
 	}
+	if exhaustive {
+		limit = len(projected)
+	}
 	pools := make([][]memory.MemoryRecord, 0, len(ordered))
 	for _, partition := range ordered {
 		if _, err := os.Stat(partition.path); err != nil {
@@ -271,7 +298,11 @@ func (p Projector) Recall(ctx context.Context, index *store.Index, plan memory.R
 		}
 		db.SetMaxOpenConns(1)
 		started := time.Now()
-		rows, err := searchNative(ctx, db, *partition, plan.Query, max(64, limit*4))
+		candidateLimit := max(64, limit*4)
+		if exhaustive {
+			candidateLimit = max(1, len(partition.records))
+		}
+		rows, err := searchNative(ctx, db, *partition, plan.Query, candidateLimit, exhaustive || plan.RetrievalMode == "hybrid")
 		mode := "scoped"
 		if plan.SearchAll {
 			mode = "search_all"

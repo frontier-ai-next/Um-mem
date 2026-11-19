@@ -16,7 +16,12 @@ func (server *Server) StartListener(ctx context.Context, ownerPID int) (string, 
 	if server == nil {
 		return "", nil, errors.New("local service server is nil")
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	// A stable default port keeps the panel bookmarkable; if it is taken (another
+	// store, a stale process) fall back to an ephemeral port instead of failing.
+	listener, err := net.Listen("tcp4", "127.0.0.1:50546")
+	if err != nil {
+		listener, err = net.Listen("tcp4", "127.0.0.1:0")
+	}
 	if err != nil {
 		return "", nil, err
 	}

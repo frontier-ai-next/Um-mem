@@ -1,6 +1,6 @@
 {
   "name": "@um-mem/cli",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Install and run the UM-MEM memory engine",
   "bin": {
     "um-memory": "bin/um-memory.js",
@@ -9,11 +9,13 @@
     "um-memory-hook": "bin/um-memory-hook.js"
   },
   "scripts": {
+    "prepack": "node ../scripts/package-agent-skill.mjs",
     "test": "node --test test/*.test.js"
   },
   "files": [
     "bin",
     "scripts",
+    "skills",
     "README.md"
   ],
   "engines": {

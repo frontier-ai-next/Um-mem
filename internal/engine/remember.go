@@ -74,6 +74,7 @@ type CandidateResult struct {
 	Route           memory.RouteDecision `json:"route_decision"`
 	Receipt         *store.WriteReceipt  `json:"receipt,omitempty"`
 	ProvenanceEdges []map[string]any     `json:"provenance_edges,omitempty"`
+	AutoLink        map[string]any       `json:"auto_link,omitempty"`
 }
 
 func firstLineTitle(content string) string {

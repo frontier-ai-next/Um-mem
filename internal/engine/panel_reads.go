@@ -87,6 +87,53 @@ func (engine *Engine) PanelCatalog(ctx context.Context, scope, scopeID string) (
 			return nil, errors.New("catalog snapshot exceeds visible tree depth")
 		}
 	}
+	// Packaged catalog blocks are routing nodes, not the blocks records live in:
+	// without this pass the panel shows a tree whose every node is empty. Attach
+	// the logical blocks that actually hold records, under the first visible root.
+	liveCounts, liveLabeled := map[string]int{}, map[string]int{}
+	if records, _, _, snapErr := engine.index.ExportGraphSnapshot(ctx); snapErr == nil {
+		for _, record := range records {
+			if record.Status == "retracted" || record.Status == "superseded" {
+				continue
+			}
+			block := ""
+			if record.BlockMembership != nil {
+				block = record.BlockMembership.PrimaryBlockID
+			}
+			if block == "" {
+				continue
+			}
+			liveCounts[block]++
+			if len(record.Metadata) > 0 {
+				liveLabeled[block]++
+			}
+		}
+	}
+	rootID := ""
+	for _, state := range states {
+		if state.Block.ParentID == "" {
+			rootID = state.Block.BlockID
+			break
+		}
+	}
+	logicalIDs := make([]string, 0, len(liveCounts))
+	for block := range liveCounts {
+		logicalIDs = append(logicalIDs, block)
+	}
+	sort.Strings(logicalIDs)
+	for _, block := range logicalIDs {
+		if seen[block] || liveCounts[block] == 0 {
+			continue
+		}
+		node := map[string]any{"block_id": block, "name": block, "parent_id": rootID,
+			"status": "active", "index_only": false, "children": []map[string]any{},
+			"canonical_record_count": liveCounts[block], "record_count": liveCounts[block],
+			"logical": true}
+		if total := liveCounts[block]; total > 0 {
+			node["label_share"] = float64(liveLabeled[block]) / float64(total)
+		}
+		flat = append(flat, node)
+	}
 	projectIDs := make([]string, 0, len(filter.projectIDs))
 	for id := range filter.projectIDs {
 		projectIDs = append(projectIDs, id)
@@ -126,6 +173,7 @@ func (engine *Engine) PanelRecordEdges(ctx context.Context, records []memory.Mem
 	if err != nil {
 		return nil, false, err
 	}
+	candidates = append(candidates, panelSourceEdges(records, 129-len(candidates))...)
 	truncated := len(candidates) > 128
 	if truncated {
 		candidates = candidates[:128]
@@ -177,6 +225,52 @@ func (engine *Engine) PanelRecordEdges(ctx context.Context, records []memory.Mem
 		bytesUsed += len(raw)
 	}
 	return result, truncated, nil
+}
+
+// Reflect stored provenance between visible notes and quotations in the panel.
+// This projection does not create semantic links or change recall.
+func panelSourceEdges(records []memory.MemoryRecord, limit int) []memory.EdgeRecord {
+	type sourceKey struct{ workspace, profile, scope, producer, id, hash string }
+	keyFor := func(record memory.MemoryRecord, ref memory.EvidenceRef) (sourceKey, bool) {
+		scope, err := record.ScopeKey()
+		if err != nil || ref.RefType != "message" || ref.ProducedBy != "human" || ref.RefID == "" || ref.ProducerID == "" {
+			return sourceKey{}, false
+		}
+		hash := ""
+		if ref.Hash != nil {
+			hash = *ref.Hash
+		}
+		return sourceKey{record.WorkspaceID, record.ProfileID, scope, ref.ProducerID, ref.RefID, hash}, true
+	}
+	quotes := make(map[sourceKey]string)
+	for _, record := range records {
+		if record.Kind != "source_excerpt" {
+			continue
+		}
+		for _, ref := range record.EvidenceRefs {
+			if key, ok := keyFor(record, ref); ok && quotes[key] == "" {
+				quotes[key] = record.BlockID
+			}
+		}
+	}
+	var edges []memory.EdgeRecord
+	for _, record := range records {
+		if record.Kind == "source_excerpt" {
+			continue
+		}
+		for _, ref := range record.EvidenceRefs {
+			if len(edges) >= limit {
+				return edges
+			}
+			if key, ok := keyFor(record, ref); ok && quotes[key] != "" {
+				edges = append(edges, memory.EdgeRecord{
+					SrcID: record.BlockID, DstID: quotes[key], WorkspaceID: record.WorkspaceID,
+					EdgeType: "cites", Reason: "Ссылка на исходную реплику", Weight: "1", EvidenceRefs: []memory.EvidenceRef{ref},
+				})
+			}
+		}
+	}
+	return edges
 }
 
 func trimPanelText(value string, limit int) string {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/frontier-ai-next/Um-mem/internal/blockcatalog"
 	"github.com/frontier-ai-next/Um-mem/internal/catalog"
 	"github.com/frontier-ai-next/Um-mem/internal/store"
 	"github.com/frontier-ai-next/Um-mem/memory"
@@ -33,6 +34,26 @@ type ActiveMaskResolution struct {
 	SemanticRecallPerformed bool
 }
 
+func (engine *Engine) maskCatalog() (*catalog.Store, map[string]bool, error) {
+	blocks, err := blockcatalog.Load(blockcatalog.Options{RepoRoot: engine.config.RepoRoot,
+		WorkspaceID: engine.config.WorkspaceID, ProfileID: engine.config.ProfileID, Strict: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	base := make(map[string]bool, len(blocks))
+	for _, block := range blocks {
+		if !block.IndexOnly {
+			base[block.BlockID] = true
+		}
+	}
+	opened, err := catalog.Open(engine.config.RepoRoot, engine.config.WorkspaceID, engine.config.ProfileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	opened.SetMaskBaseBlocks(base)
+	return opened, base, nil
+}
+
 func (engine *Engine) SetActiveMask(ctx context.Context, mask memory.ActiveMemoryMask, sessionID, taskID string) (memory.ActiveMemoryMask, error) {
 	if sessionID == "" || mask.SessionID != "" || mask.TaskID != "" || mask.WorkspaceID != "" || mask.ProfileID != "" ||
 		mask.MaskID != "" || mask.Revision != 0 || mask.Status != "" {
@@ -41,7 +62,7 @@ func (engine *Engine) SetActiveMask(ctx context.Context, mask memory.ActiveMemor
 	mask.WorkspaceID, mask.ProfileID = engine.config.WorkspaceID, engine.config.ProfileID
 	mask.SessionID, mask.TaskID = sessionID, taskID
 	mask.Revision, mask.Status = 1, "active"
-	opened, err := catalog.Open(engine.config.RepoRoot, engine.config.WorkspaceID, engine.config.ProfileID)
+	opened, _, err := engine.maskCatalog()
 	if err != nil {
 		return memory.ActiveMemoryMask{}, err
 	}
@@ -50,7 +71,7 @@ func (engine *Engine) SetActiveMask(ctx context.Context, mask memory.ActiveMemor
 }
 
 func (engine *Engine) AmendActiveMask(ctx context.Context, change catalog.MaskAmendment) (memory.ActiveMemoryMask, error) {
-	opened, err := catalog.Open(engine.config.RepoRoot, engine.config.WorkspaceID, engine.config.ProfileID)
+	opened, _, err := engine.maskCatalog()
 	if err != nil {
 		return memory.ActiveMemoryMask{}, err
 	}
@@ -98,7 +119,7 @@ func (engine *Engine) ResolveActiveMask(ctx context.Context, request ActiveMaskR
 	if len(request.ScopeChain) == 0 {
 		return result, errors.New("active mask requires a host-bound scope chain")
 	}
-	opened, err := catalog.Open(engine.config.RepoRoot, engine.config.WorkspaceID, engine.config.ProfileID)
+	opened, base, err := engine.maskCatalog()
 	if err != nil {
 		return result, err
 	}
@@ -145,6 +166,9 @@ func (engine *Engine) ResolveActiveMask(ctx context.Context, request ActiveMaskR
 		state, err := opened.GetBlock(ctx, blockID)
 		if err != nil {
 			return result, err
+		}
+		if state == nil && base[blockID] {
+			continue
 		}
 		if state == nil || state.Status != "active" {
 			result.Status, result.RefreshReason = "catalog_mismatch", "selected_block_missing"

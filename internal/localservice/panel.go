@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -81,7 +82,7 @@ func (panel *Panel) activate() (string, error) {
 func (panel *Panel) deactivate(idleOnly bool) bool {
 	panel.mu.Lock()
 	defer panel.mu.Unlock()
-	if idleOnly && (!panel.active || panel.streams != 0 || time.Since(panel.lastBrowser) <= time.Minute) {
+	if idleOnly && (!panel.active || panel.streams != 0 || time.Since(panel.lastBrowser) <= panel.idleTimeout()) {
 		return false
 	}
 	panel.active = false
@@ -89,6 +90,17 @@ func (panel *Panel) deactivate(idleOnly bool) bool {
 	panel.accessToken = ""
 	panel.feed.Wake()
 	return true
+}
+
+// idleTimeout keeps the panel usable for a working day instead of expiring one
+// minute after the last click, which read as "the panel does not open".
+func (panel *Panel) idleTimeout() time.Duration {
+	if raw := os.Getenv("UM_MEM_PANEL_IDLE"); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return 8 * time.Hour
 }
 
 func (panel *Panel) expireIfIdle() { panel.deactivate(true) }
@@ -170,9 +182,23 @@ func (panel *Panel) Handle(writer http.ResponseWriter, request *http.Request, se
 	}
 	panel.expireIfIdle()
 	path := request.URL.Path
-	if path != "/panel/connect" && !panel.isActive() {
+	if path != "/panel/connect" && path != "/" && !panel.isActive() {
 		panelJSON(writer, http.StatusGone, map[string]any{"error": "Panel is stopped. Run um-memory dashboard."})
 		return
+	}
+	// Opening the bare port used to answer 401, which reads as "the panel is
+	// broken". Send the browser to the panel with the current token instead.
+	if request.Method == http.MethodGet && (path == "/" || path == "") {
+		if !panel.isActive() {
+			if token, err := panel.activate(); err == nil {
+				http.Redirect(writer, request, "/panel/#"+token, http.StatusFound)
+				return
+			}
+		}
+		if panel.accessToken != "" {
+			http.Redirect(writer, request, "/panel/#"+panel.accessToken, http.StatusFound)
+			return
+		}
 	}
 	if request.Method == http.MethodGet && (path == "/panel" || path == "/panel/") {
 		panel.serveAsset(writer, "index.html")
@@ -229,6 +255,8 @@ func (panel *Panel) Handle(writer http.ResponseWriter, request *http.Request, se
 		switch {
 		case request.Method == http.MethodGet && path == "/panel/api/snapshot":
 			payload, err = panel.snapshot(request.Context(), server, query.Get("scope"), query.Get("scope_id"))
+		case request.Method == http.MethodGet && path == "/panel/api/harness-context":
+			payload = map[string]any{"ok": true, "turns": harnessContext(server.identity)}
 		case request.Method == http.MethodGet && path == "/panel/api/records":
 			payload, err = panel.records(request.Context(), server, query.Get("block"),
 				query.Get("cursor"), query.Get("scope"), query.Get("scope_id"))

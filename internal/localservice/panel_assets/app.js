@@ -1,10 +1,10 @@
 import {layoutHierarchy,separateOverlaps,zoomAt,fitBounds,mapProjection,graphTransition,sampleGraphTransition} from './graph-layout.mjs';
-import {scopeBlocks,scopeCount,createBranchPager,filterBlocks,filterRecords,sortRecords,panelPreferences,readAllRecords} from './branch-records.mjs';
+import {blockName,scopeBlocks,scopeCount,createBranchPager,filterBlocks,compactTopicTree,filterRecords,sortRecords,panelPreferences,readAllRecords} from './branch-records.mjs';
 const $ = id => document.getElementById(id);
-const state = {snapshot:null, records:[], browseRecords:[], block:'', cursor:'', scope:{scope:'workspace',scopeId:''}, scopeLimited:false, view:'memory', mode:'graph',
+const state = {snapshot:null, records:[], browseRecords:[], block:'', cursor:'', scope:{scope:'workspace',scopeId:''}, scopeLimited:false, view:'memory', mode:'list',
   selected:'', detail:null, draft:null, query:'', events:[], positions:{}, manualNodes:new Set(),
   treeExpanded:new Set(), treeReady:false, descendants:true, pager:null, browseRequest:0, recordsLoading:false, recordsError:'',
-  blockQuery:'', hideEmpty:false, recordStatus:'', recordKind:'', recordSort:'newest', recordLimit:64, recordsScanned:0, preferencesReady:false,
+  blockQuery:'', hideEmpty:true, recordStatus:'', recordKind:'', recordSort:'newest', recordLimit:64, recordsScanned:0, preferencesReady:false,
   graphFocus:false, graphOverview:false, focusExpanded:new Set(), contextExpanded:new Set(), drawPositions:{},
   expanded:new Set(), branchRecords:new Map(), graphBusy:new Set(), graphOffset:{x:0,y:0}, layoutAnchor:null, graphReady:false,
   transform:{x:0,y:0,k:1}, source:null, refreshing:false, pending:false, detailRequest:0,
@@ -12,7 +12,17 @@ const state = {snapshot:null, records:[], browseRecords:[], block:'', cursor:'',
 const statusNames = {candidate:'Не проверено',accepted:'Подтверждено',active:'Действует',
   retracted:'Отозвано',superseded:'Заменено',deprecated:'Устарело',expired:'Срок истёк',quarantined:'Карантин'};
 const kindNames = {observation:'Наблюдение',project_fact:'Факт о проекте',procedure:'Процедура',
-  rule:'Правило',lesson:'Вывод',fact:'Факт',memory:'Запись',finding:'Результат исследования',source_card:'Карточка источника',session_checkpoint:'Итог сессии'};
+  rule:'Рабочее правило',lesson:'Урок',fact:'Факт',memory:'Запись',finding:'Результат исследования',research:'Исследование',report:'Отчёт',source_card:'Карточка источника',session_checkpoint:'Итог сессии',
+  episode:'Эпизод',decision:'Решение',preference:'Предпочтение',task:'Задача',idea:'Идея',
+  note:'Заметка',tool_output:'Результат действия',source_excerpt:'Цитата источника'};
+const blockSummaries = {
+  directive_memory_index:'Обязательные установки, утверждённые владельцем или управляющей системой.',
+  user_global_core_directives:'Утверждённые установки пользователя, действующие в разных проектах.',
+  workspace_core_directives:'Утверждённые установки для этого пространства.',
+  durable_reports:'Результаты исследований и отчёты. Источники и свидетельства видны в карточках записей.',
+  decisions_and_contracts:'Принятые решения, договорённости и рабочие правила, которые могут пригодиться агенту.',
+  reflection_candidates:'Уроки и выводы, для которых ещё нужны подтверждения.',
+};
 const operationNames = {remember:'Добавлена запись',amend:'Изменена запись',forget:'Запись отозвана',
   create_block:'Создана тема',amend_block:'Изменена тема',move_block:'Перемещена тема',
   archive_block:'Тема архивирована',delete_block:'Тема удалена',set_active_mask:'Выбран рабочий контекст',
@@ -40,6 +50,41 @@ function badge(status) {
 function date(value) {const d=new Date(value); return isNaN(d)?'Без даты':d.toLocaleString('ru',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
 function flatten(nodes, out=[]) {for(const n of nodes||[]){out.push(n);flatten(n.children,out);}return out;}
 function topic(id) {return flatten(state.snapshot?.tree).find(n=>n.block_id===id);}
+function blockLabel(id){return blockName(topic(id)||{block_id:id});}
+const retentionNames={ephemeral:'Кратковременная',session:'На сессию',durable:'Долгосрочная',archive:'Архив'};
+const temperatureNames={hot:'Горячая',warm:'Тёплая',cold:'Холодная'};
+const deliveryNames={always_on:'Всегда в контексте',working_set:'Рабочий набор',on_demand:'По запросу',hidden:'Скрыта'};
+const authorityNames={advisory:'Справочная',directive:'Обязательная'};
+function memoryProperties(record,block){
+  const key=record?.logical_block_id||record?.block_membership?.primary_block_id;
+  const expiry=record?.expires_at||block?.lifecycle?.expires_at;
+  const end=record?.valid_to;
+  const fullDate=value=>{const parsed=new Date(value);return Number.isNaN(parsed.valueOf())?value:parsed.toLocaleString('ru',{dateStyle:'medium',timeStyle:'short'});};
+  const fields=[
+    ['Раздел',key&&blockLabel(key)],
+    ['Хранение',retentionNames[record?.retention||block?.retention]],
+    ['Температура',temperatureNames[record?.temperature||block?.temperature]],
+    ['Политика подачи',deliveryNames[record?.delivery_policy||block?.lifecycle?.delivery_policy]],
+    ['Роль',authorityNames[record?.authority||block?.trust]],
+    ['Хранить до',expiry&&fullDate(expiry)],
+    ['Факт действует до',end&&fullDate(end)],
+  ].filter(([,value])=>value);
+  const list=element('dl','memory-properties');list.setAttribute('aria-label','Свойства памяти');
+  for(const [label,value] of fields){const item=element('div');item.append(element('dt','',label),element('dd','',value));list.append(item);}
+  return list;
+}
+function authoredProperties(record){
+  const labels=record?.metadata?.memory_facets;
+  const fields=[['Зачем хранить',labels?.purpose],['Когда применять',labels?.applies_when],
+    ['Когда пересмотреть',labels?.review_when]].filter(([,value])=>typeof value==='string'&&value.trim());
+  if(!fields.length)return null;
+  const section=element('section','authored-properties');
+  section.append(element('h3','','Метки агента'));
+  const list=element('dl','memory-properties');list.setAttribute('aria-label','Метки агента');
+  for(const [label,value] of fields){const item=element('div');item.append(element('dt','',label),element('dd','',value));list.append(item);}
+  section.append(list);
+  return section;
+}
 function blockScopeHint() {
   const block=topic(state.block);if(!block)return '';
   const blockScope=block.scope||'workspace';
@@ -113,13 +158,11 @@ function connected(value) {
     s?.read_only?`Срез ${date(s.snapshot_at)}`:s&&`Обновлено ${new Date().toLocaleTimeString('ru')}`].filter(Boolean).join(' · ');
 }
 function renderSummary() {
-  const s=state.snapshot, nodes=flatten(s.tree).filter(n=>!n.meta);
+  const s=state.snapshot, nodes=flatten(s.tree);
   renderMemoryScope();
   $('workspace').textContent=s.workspace_label||s.workspaces?.find(w=>w.key===s.workspace_key)?.label||s.workspace||'Память';
   $('workspace').title=[s.workspace,`Профиль: ${s.profile}`,s.source_path].filter(Boolean).join('\n');
-  $('stat-topics').textContent=s.read_only?nodes.length:nodes.filter(n=>n.parent_id).length;
-  $('stat-records').textContent=scopeCount(flatten(s.tree));
-  $('tree-count').textContent=nodes.length;
+  $('stat-records').textContent=scopeCount(nodes);
   document.body.classList.toggle('read-only',Boolean(s.read_only));
   $('data-controls').hidden=!s.read_only;
   $('stop-panel').hidden=Boolean(s.read_only);
@@ -160,12 +203,20 @@ function renderTopics() {
   while(ancestor&&!ancestors.has(ancestor.block_id)){ancestors.add(ancestor.block_id);ancestor=topic(ancestor.parent_id);}
   const roots=state.snapshot?.tree||[];
   const filtered=filterBlocks(roots,{query:state.blockQuery,hideEmpty:state.hideEmpty});
-  $('hide-empty').checked=state.hideEmpty;$('clear-block-query').hidden=!state.blockQuery;
+  const compact=state.hideEmpty&&!state.blockQuery;
+  const shown=compact?compactTopicTree(roots,filtered.visible,[state.block,state.selectedTopic]):roots;
+  const empty=flatten(roots).filter(node=>!(node.children||[]).length&&blockRecordCount(node)===0).length;
+  const catalog=$('toggle-catalog');
+  catalog.hidden=Boolean(state.blockQuery)||(!empty&&state.hideEmpty&&flatten(shown).length===flatten(roots).length);
+  catalog.setAttribute('aria-pressed',String(!state.hideEmpty));
+  catalog.textContent=state.hideEmpty?'Показать полный каталог':'Свернуть каталог';
+  $('clear-block-query').hidden=!state.blockQuery;
   const note=$('block-filter-note');note.hidden=!state.blockQuery;
   note.textContent=state.blockQuery?`Найдено блоков: ${filtered.matches.size}`:'';
   if(!state.treeReady){state.treeReady=true;for(const root of roots)state.treeExpanded.add(root.block_id);}
   function appendNode(n,depth){
-    if(n.meta||!filtered.visible.has(n.block_id))return;
+    if(!filtered.visible.has(n.block_id))return;
+    const name=blockName(n);
     const row=element('div','topic-row');row.dataset.rowId=n.block_id;row.style.setProperty('--depth',depth);
     const children=(n.children||[]).filter(child=>filtered.visible.has(child.block_id));
     const expanded=state.blockQuery?filtered.expanded.has(n.block_id):state.treeExpanded.has(n.block_id);
@@ -175,18 +226,21 @@ function renderTopics() {
         renderTopics();storeLayout();
       });
       toggle.disabled=Boolean(state.blockQuery);
-      toggle.setAttribute('aria-label',`${expanded?'Свернуть':'Раскрыть'} ${n.name}`);
+      toggle.setAttribute('aria-label',`${expanded?'Свернуть':'Раскрыть'} ${name}`);
       toggle.setAttribute('aria-expanded',String(expanded));toggle.dataset.treeId=n.block_id;toggle.dataset.treeAction='toggle';row.append(toggle);
     }else row.append(element('span','topic-spacer'));
     const b=button('',`topic ${state.block===n.block_id?'selected':ancestors.has(n.block_id)?'ancestor':''}`,()=>selectBlock(n.block_id));
     if(state.block===n.block_id)b.setAttribute('aria-current','true');
-    b.dataset.treeId=n.block_id;b.dataset.treeAction='select';b.title=`${n.name} · ${counted(blockRecordCount(n),['запись','записи','записей'])} с вложенными блоками`;
+    b.dataset.treeId=n.block_id;b.dataset.treeAction='select';b.title=`${name} · ${counted(blockRecordCount(n),['запись','записи','записей'])} с вложенными блоками`;
     b.style.setProperty('--node-color',colorFor(n.block_id));
     b.classList.toggle('match',filtered.matches.has(n.block_id));
-    b.append(element('span','topic-name',n.name),element('small','',String(blockRecordCount(n))));row.append(b);list.append(row);
+    b.append(element('span','topic-name',name),element('small','',String(blockRecordCount(n))));row.append(b);list.append(row);
     if(expanded)for(const child of children)appendNode(child,depth+1);
   }
-  const visibleRoots=roots.length===1&&roots[0].children?.length&&!filtered.matches.has(roots[0].block_id)?roots[0].children:roots;
+  const visibleRoots=!compact&&roots.length===1&&roots[0].children?.length&&!filtered.matches.has(roots[0].block_id)?roots[0].children:shown;
+  const visibleCount=flatten(visibleRoots).filter(node=>filtered.visible.has(node.block_id)).length;
+  $('tree-count').textContent=visibleCount;
+  $('stat-topics').textContent=counted(visibleCount,['блок','блока','блоков']);
   for(const root of visibleRoots)appendNode(root,0);
   if(!list.childElementCount)list.append(element('p','tree-empty',state.blockQuery?'Блоки не найдены. Измените поиск или отключите скрытие пустых веток.':'Все ветки пусты. Отключите скрытие, чтобы увидеть их.'));
   if(!reducedMotion.matches&&previous.size){
@@ -272,9 +326,9 @@ function renderRecords() {
     const card=button('',`record-card ${r.record_id===state.selected?'selected':''}`,()=>openRecord(r.record_id));
     card.style.setProperty('--node-color',colorFor(r.logical_block_id));
     const top=element('div','card-top'),kind=element('div','record-kind');
-    kind.append(icon(recordIcon(r.kind)),element('span','',kindNames[r.kind]||r.kind||'Запись'));
+    kind.append(icon(recordIcon(r.kind)),element('span','',(kindNames[r.kind]||r.kind||'Запись')+(r.source_copies?' · ×'+r.source_copies:'')));
     top.append(kind,badge(r.status));
-    const bottom=element('div','card-bottom');bottom.append(element('span','',topic(r.logical_block_id)?.name||'Общая память'),
+    const bottom=element('div','card-bottom');bottom.append(element('span','',blockLabel(r.logical_block_id)),
       element('span','',date(r.recorded_at)));
     if(r.score!==undefined)card.title=`${r.score_mode==='semantic_cosine'?'Сходство':'Оценка'}: ${Number(r.score).toFixed(3)}. Оценка поиска не подтверждает достоверность записи.`;
     card.append(top,element('h3','',r.title||'Без названия'),element('p','',r.preview||''),bottom);list.append(card);
@@ -329,7 +383,7 @@ async function refresh() {
   if(state.refreshing){state.pending=true;return;}
   state.refreshing=true;
   try {
-    const snapshot=await api(`api/snapshot?${scopeQuery()}`);state.snapshot=snapshot;mergeEvents(snapshot.events,snapshot.cursor);
+    const snapshot=await api(`api/snapshot?${scopeQuery()}`);state.snapshot=snapshot;mergeEvents(snapshot.events,snapshot.cursor);(function walk(list,depth){for(const b of list||[]){if(depth<=1||b.relation_count)state.contextExpanded.add(b.block_id);walk(b.children,depth+1);}})(snapshot.tree||[],0);
     if(snapshot.read_only&&snapshot.workspace_key){
       const url=new URL(location.href);
       if(url.searchParams.get('workspace')!==snapshot.workspace_key){url.searchParams.set('workspace',snapshot.workspace_key);history.replaceState(null,'',url);}
@@ -396,6 +450,86 @@ function setView(view) {
   $('breadcrumbs').hidden=true;
   $('new-record').hidden=true;
   if(view==='memory')renderLocation();
+  clearInterval(harnessTimer);
+  if(view==='context'){
+    void refreshHarnessContext();
+    harnessTimer=setInterval(refreshHarnessContext,4000);
+  }
+}
+let harnessTimer, lastHarnessContext;
+async function refreshHarnessContext(){
+  const container=$('harness-turns');
+  if(state.view!=='context')return;
+  try{
+    const {turns}=await api('api/harness-context');
+    if(state.view!=='context')return;
+    const signature=JSON.stringify(turns);
+    if(signature===lastHarnessContext)return;
+    lastHarnessContext=signature;
+    const open=new Set([...container.querySelectorAll('details[open]')].map(node=>node.dataset.turn));
+    container.replaceChildren();
+    if(!turns.length)container.append(element('p','empty','В этом пространстве пока нет записанных ходов Harness.'));
+    for(const [index,turn] of turns.entries()){
+      const item=element('details','harness-turn');item.dataset.turn=turn.id;
+      item.open=open.has(turn.id)||(!open.size&&index===0);
+      const searches=turn.searches||[],automatic=turn.automatic||[];
+      item.append(element('summary','',`${date(turn.at)} · ход ${turn.turn} · ${automatic.length} в контексте · ${counted(searches.length,['обращение','обращения','обращений'])}`));
+      const content=element('div','harness-turn-body');
+      content.append(element('h3','','Подставлено перед ответом'));
+      const note=turn.status==='unavailable'?'Хранилище было недоступно':automatic.length?`${turn.chars} знаков подстановки`:'Подстановка была пустой';
+      content.append(element('p','metadata',note+` · сессия ${String(turn.session).slice(0,8)}`));
+      const reads=[];
+      for(const record of automatic){
+        const source=element('div','harness-hit');
+        const reference=button('Открыть запись','text-button',()=>openRecord(record.id));
+        const excerpt=element('p','','');
+        source.append(reference,excerpt);
+        reads.push(async()=>{
+          try{
+            const {record:canonical}=await api('api/record?id='+encodeURIComponent(record.id));
+            if(record.revision&&canonical.revision_id!==record.revision){
+              excerpt.textContent='Эта ревизия больше недоступна.';
+              return;
+            }
+            reference.textContent=canonical.title||reference.textContent;
+            const text=String(canonical.content??'').replace(/\s+/g,' ').trim();
+            const limit=record.chars||text.length;
+            excerpt.textContent=record.clipped?text.slice(0,limit-1)+'…':text.slice(0,limit);
+          }catch{excerpt.textContent='Источник записи больше недоступен.';}
+        });
+        content.append(source);
+      }
+      if(searches.length){
+        content.append(element('h3','','Запросы к памяти во время хода'));
+        for(const result of searches){
+          const entry=element('div','harness-hit');
+          const results=result.records||[];
+          const operation={read:'Чтение записи',recall:'Поиск',topics:'Темы'}[result.operation]||'Запрос';
+          const note={repeat:' · повтор без поиска',budget:' · лимит запросов исчерпан'}[result.skipped]||
+            (results.length?'':' · новых записей нет');
+          entry.append(element('p','metadata',`${operation} · ${result.chars} знаков${note}`));
+          for(const record of results){
+            const reference=button(record.id,'text-button',()=>openRecord(record.id));
+            reads.push(async()=>{
+              try{
+                const {record:canonical}=await api('api/record?id='+encodeURIComponent(record.id));
+                reference.textContent=canonical.title||reference.textContent;
+              }catch{reference.textContent='Запись больше недоступна';reference.disabled=true;}
+            });
+            entry.append(reference);
+          }
+          content.append(entry);
+        }
+      }
+      let loaded=false;
+      const hydrate=()=>{if(item.open&&!loaded){loaded=true;void Promise.all(reads.map(read=>read()));}};
+      item.addEventListener('toggle',hydrate);
+      item.append(content);container.append(item);hydrate();
+    }
+  }catch{
+    lastHarnessContext=undefined;
+    if(state.view==='context')container.replaceChildren(element('p','empty','Не удалось загрузить контекст Harness.'));
+  }
 }
 let discardPending=false;
 async function allowLeave() {
@@ -429,6 +563,15 @@ function renderDetail(data) {
   const kind=element('div','detail-kind');kind.append(icon(recordIcon(r.kind)),element('span','',kindNames[r.kind]||r.kind||'Запись'));box.append(kind);
   box.append(badge(r.status),element('h2','',r.title||'Без названия'),element('p','metadata',
     `${date(r.recorded_at)} · ${kindNames[r.kind]||r.kind}`));
+  box.append(memoryProperties(r));
+  const authored=authoredProperties(r);
+  if(authored)box.append(authored);
+  const tags=[...new Set(r.tags||[])];
+  if(tags.length){
+    const labels=element('div','tags');labels.setAttribute('aria-label','Метки записи');
+    for(const tag of tags)labels.append(element('span','',tag));
+    box.append(labels);
+  }
   if(!data.is_current)box.append(element('p','conflict','Предыдущая версия записи'));
   box.append(element('div','record-body',r.content));
   if(data.is_current&&canWrite()){const edit=button(r.status==='candidate'?'Редактировать запись':'Предложить уточнение','text-button detail-edit',()=>editRecord(r));edit.prepend(icon('edit'));box.append(edit);}
@@ -474,7 +617,7 @@ async function editRecord(record=null,blockId='') {
   if(!record) {
     const select=field('Тема','edit-block','select','');
     for(const t of flatten(state.snapshot?.tree).filter(n=>n.writable&&!n.meta)){
-      const o=element('option','',t.name);o.value=t.block_id;select.append(o);
+      const o=element('option','',blockName(t));o.value=t.block_id;select.append(o);
     }
     if([...select.options].some(option=>option.value===(blockId||state.block)))select.value=blockId||state.block;
     if(!select.options.length){box.append(element('p','conflict','Сначала создайте тему через агента UM-MEM. В пространстве пока нет доступной для записи темы.'));return;}
@@ -595,7 +738,7 @@ const iconPaths={
 };
 function icon(name){const node=svg('svg',{class:'ui-icon',viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'});node.append(svg('path',{d:iconPaths[name]||iconPaths.file}));return node;}
 function recordIcon(kind){return {source_card:'book',finding:'bulb',procedure:'arrow',rule:'diamond',session_checkpoint:'activity'}[kind]||'file';}
-function blockStyle(id){const name=topic(id)?.name||'';return branchStyles.find(([match])=>match.test(name));}
+function blockStyle(id){const name=blockLabel(id);return branchStyles.find(([match])=>match.test(name));}
 function blockRecordCount(block){return Number(block.canonical_record_count||0)+(block.children||[]).reduce((total,child)=>total+blockRecordCount(child),0);}
 function colorFor(id) {const style=blockStyle(id);if(style)return style[1];let hash=0;for(const c of id||'')hash=(hash*31+c.charCodeAt(0))>>>0;return palette[hash%palette.length];}
 function svg(tag,attributes={},text=''){const node=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attributes))node.setAttribute(k,v);node.textContent=text;return node;}
@@ -625,9 +768,11 @@ function renderLocation(){
   const crumbs=$('breadcrumbs');crumbs.replaceChildren();crumbs.hidden=!current?.parent_id;
   if(current?.parent_id){
     crumbs.append(button('← Вся память','',()=>selectBlock('')));
-    for(const part of path.slice(0,-1).filter(part=>part.parent_id))crumbs.append(element('span','','/'),button(part.name,'',()=>selectBlock(part.block_id)));
+    const roots=state.snapshot.tree;
+    const visible=state.hideEmpty?new Set(flatten(compactTopicTree(roots,filterBlocks(roots,{hideEmpty:true}).visible,[state.block])).map(part=>part.block_id)):null;
+    for(const part of path.slice(0,-1).filter(part=>part.parent_id&&(!visible||visible.has(part.block_id))))crumbs.append(element('span','','/'),button(blockName(part),'',()=>selectBlock(part.block_id)));
   }
-  $('page-title').textContent=current?.name||'Карта знаний';
+  $('page-title').textContent=current?blockName(current):'Карта знаний';
   $('page-title').title=current?.description||current?.synopsis||'';
   document.querySelector('main').style.setProperty('--scope-color',current?colorFor(current.block_id):'#b49aff');
 }
@@ -642,13 +787,14 @@ function renderBlockDetail(id){
   setDetailOpen(true);$('detail-label').textContent='БЛОК ПАМЯТИ';
   $('detail').style.setProperty('--node-color',colorFor(id));
   const box=$('detail-content');box.replaceChildren();
-  const symbol=element('div','block-symbol');symbol.append(icon(blockStyle(id)?.[2]||'layers'));symbol.style.setProperty('--node-color',colorFor(id));box.append(symbol,element('h2','',b.name));
-  const tags=element('div','tags');for(const tag of b.tags||[])tags.append(element('span','',tag));box.append(tags);
-  if(b.description||b.synopsis)box.append(element('p','record-body',b.description||b.synopsis));
+  const symbol=element('div','block-symbol');symbol.append(icon(blockStyle(id)?.[2]||'layers'));symbol.style.setProperty('--node-color',colorFor(id));box.append(symbol,element('h2','',blockName(b)));
+  box.append(memoryProperties(null,b));
+  const summary=b.description||blockSummaries[id]||b.synopsis;
+  if(summary)box.append(element('p','record-body',summary));
   if(canWrite()&&!b.protected&&!b.meta&&b.revision&&b.status!=='archived'){const edit=button('Редактировать блок','text-button detail-edit',()=>editBlock(id));edit.prepend(icon('edit'));box.append(edit);}
   if(b.children?.length){box.append(element('h3','','Внутри блока'));for(const child of b.children){
     const item=button('','block-child',()=>selectBlock(child.block_id));item.style.setProperty('--node-color',colorFor(child.block_id));
-    item.append(element('span','legend-dot'),element('span','',child.name),element('small','',String(blockRecordCount(child))));box.append(item);
+    item.append(element('span','legend-dot'),element('span','',blockName(child)),element('small','',String(blockRecordCount(child))));box.append(item);
   }}
   const records=sortRecords(filterRecords(state.branchRecords.get(id)?.records||[],recordFilters()),state.recordSort);
   if(records.length){
@@ -660,8 +806,10 @@ function renderBlockDetail(id){
     if(records.length>6)box.append(button('Все записи блока →','block-child',async()=>{await selectBlock(id);setMode('list');}));
   }
   const related=(state.snapshot.edges||[]).filter(e=>e.src_id===id||e.dst_id===id);
-  if(related.length){box.append(element('h3','','Связанные блоки'));for(const edge of related){const target=topic(edge.src_id===id?edge.dst_id:edge.src_id);if(target)box.append(button(target.name+' ↗','block-child',()=>openBlock(target.block_id)));}}
-  if(b.parent_id)box.append(button('← '+(topic(b.parent_id)?.name||'Родительский блок'),'block-child',()=>selectBlock(b.parent_id)));
+  if(related.length){box.append(element('h3','','Связанные блоки'));for(const edge of related){const target=topic(edge.src_id===id?edge.dst_id:edge.src_id);if(target)box.append(button(blockName(target)+' ↗','block-child',()=>openBlock(target.block_id)));}}
+  if(b.parent_id)box.append(button('← '+blockLabel(b.parent_id),'block-child',()=>selectBlock(b.parent_id)));
+  const technical=element('details','metadata');technical.append(element('summary','','Технические сведения'),element('p','',id));
+  const tags=element('div','tags');for(const tag of [...new Set([...(b.chips||[]),...(b.tags||[])])])tags.append(element('span','',tag));technical.append(tags);box.append(technical);
   renderSelectionTools();
 }
 let graphNodes=[],graphLinks=[],motionNodes=[];
@@ -676,7 +824,7 @@ async function loadBranch(id,{more=false,force=false}={}){
   try{
     const pager=createBranchPager([topic(id)],(block,cursor)=>api(recordsUrl(block,cursor)));
     const records=await readAllRecords(pager);
-    const result={records,cursor:'',visible:Math.min(records.length,cached?.visible||6)};
+    const result={records,cursor:'',visible:Math.min(records.length,cached?.visible||(more?12:6))};
     state.branchRecords.set(id,result);return result;
   }finally{state.graphBusy.delete(id);}
 }
@@ -722,44 +870,53 @@ function sizeGraphNode(n){
 }
 function graphModel(){
   const links=[],seen=new Set();
+  const previews=new Map();
+  for(const record of state.snapshot.records||[]){
+    const id=record.logical_block_id;
+    if(!previews.has(id))previews.set(id,[]);
+    previews.get(id).push(record);
+  }
   const nonempty=filterBlocks(state.snapshot.tree,{hideEmpty:state.hideEmpty}).visible;
   const context=new Set(scopeBlocks(state.snapshot.tree,state.block).map(b=>b.block_id));let ancestor=topic(state.block);
   while(ancestor?.parent_id&&!context.has(ancestor.parent_id)){context.add(ancestor.parent_id);ancestor=topic(ancestor.parent_id);}
   function branch(b,parent='',color=colorFor(b.block_id),depth=0){
     if(seen.has(b.block_id))return null;seen.add(b.block_id);
-    const cached=state.branchRecords.get(b.block_id),expanded=(state.graphFocus&&state.block?state.focusExpanded:state.expanded).has(b.block_id)&&
-      (!state.block||state.graphFocus||state.graphOverview||context.has(b.block_id)||state.contextExpanded.has(b.block_id)||b.block_id==='__overview');
+    const cached=state.branchRecords.get(b.block_id),expanded=((state.graphFocus&&state.block?state.focusExpanded:state.expanded).has(b.block_id)&&
+      (!state.block||state.graphFocus||state.graphOverview||context.has(b.block_id)||state.contextExpanded.has(b.block_id)||b.block_id==='__overview'))||(depth<=2&&!state.block)||b.relation_count>0;
     const children=(b.children||[]).filter(child=>nonempty.has(child.block_id));
     const recordsAllowed=!state.block||state.descendants||b.block_id===state.block;
-    const records=recordsAllowed?cached?.records||[]:[];
+    const records=recordsAllowed?(cached?.records||previews.get(b.block_id)||[]):[];
     const matches=sortRecords(filterRecords(records,recordFilters()),state.recordSort);
+    const visible=cached?.visible||6;
     const expandable=children.length>0||recordsAllowed&&(cached?matches.length>0:Number(b.canonical_record_count)>0);
     const childCount=children.length===(b.children||[]).length?counted(children.length,['блок','блока','блоков']):`${children.length} из ${b.children.length} блоков`;
-    const n=sizeGraphNode({id:b.block_id,parent,title:b.name,type:'block',central:!parent,color,r:parent?27:37,archived:b.status==='archived',recordCount:blockRecordCount(b),
+    const n=sizeGraphNode({id:b.block_id,parent,title:blockName(b),type:'block',central:!parent,color,r:parent?27:37,archived:b.status==='archived',recordCount:blockRecordCount(b),
       expandable,expanded:expanded&&expandable,busy:state.graphBusy.has(b.block_id),subtitle:state.graphBusy.has(b.block_id)?'Загрузка…':
-        (b.status==='archived'?'Архив · ':'')+(b.children?.length?childCount+' · ':'')+counted(blockRecordCount(b),['запись','записи','записей']),children:[]});
+        (b.status==='archived'?'Архив · ':'')+(b.children?.length?childCount+' · ':'')+counted(blockRecordCount(b),['запись','записи','записей'])+(b.relation_count?' · '+b.relation_count+' связ.':'')+(b.label_share?', '+Math.round(b.label_share*100)+'% меток':''),children:[]});
     if(expanded){
       for(const child of children){
         const next=branch(child,n.id,colorFor(child.block_id),depth+1);
         if(next){n.children.push(next);links.push({source:n.id,target:next.id,type:'tree',color:next.color});}
       }
-      for(const r of matches.slice(0,cached?.visible||6)){
-        const next=sizeGraphNode({id:r.record_id,parent:n.id,recordId:r.record_id,title:r.title||'Без названия',type:'record',color,r:9,kind:r.kind,status:r.status,recordedAt:r.recorded_at,children:[]});
+      for(const r of matches.slice(0,visible)){
+        const next=sizeGraphNode({id:r.record_id,parent:n.id,recordId:r.record_id,title:r.title||'Без названия',type:'record',color,r:9,kind:r.kind,status:r.status,recordedAt:r.recorded_at,sourceCopies:r.source_copies,children:[]});
         n.children.push(next);links.push({source:n.id,target:next.id,type:'membership',color});
       }
-      if(cached&&cached.visible<matches.length){
+      if(visible<matches.length){
         const next=sizeGraphNode({id:'more:'+n.id,parent:n.id,blockId:n.id,title:'Ещё записи',type:'more',color,r:13,
-          subtitle:`${cached.visible} из ${matches.length}`,children:[]});
+          subtitle:`${visible} из ${matches.length}`,children:[]});
         n.children.push(next);links.push({source:n.id,target:next.id,type:'membership',color});
       }
     }
     return n;
   }
-  const roots=state.graphFocus&&topic(state.block)?[topic(state.block)]:(state.snapshot.tree||[]).filter(b=>nonempty.has(b.block_id));
-  let root=roots.length===1?branch(roots[0]):roots.length?branch({block_id:'__overview',name:'Вся память',children:roots}):null;
+  let roots=state.graphFocus&&topic(state.block)?[topic(state.block)]:(state.snapshot.tree||[]).filter(b=>nonempty.has(b.block_id)&&blockRecordCount(b)>0);
+  if(state.hideEmpty)roots=compactTopicTree(roots,nonempty,[state.block,state.selectedTopic]);
+  const root=roots.length===1?branch(roots[0]):roots.length?branch({block_id:'__overview',name:'Память пространства',children:roots}):null;
   const nodes=layoutHierarchy(root,22,48);
   const visible=new Set(nodes.map(n=>n.id));
   for(const edge of state.snapshot.edges||[]){if(visible.has(edge.src_id)&&visible.has(edge.dst_id))links.push({source:edge.src_id,target:edge.dst_id,type:'related',label:edge.relation||edge.edge_type||'Связь блоков'});}
+  for(const edge of state.snapshot.record_edges||[]){if(visible.has(edge.src_id)&&visible.has(edge.dst_id))links.push({source:edge.src_id,target:edge.dst_id,type:'related evidence-related',label:edge.reason||edge.edge_type||'Связь записей'});}
   return {nodes,links};
 }
 function activateGraphNode(n){
@@ -769,7 +926,6 @@ function activateGraphNode(n){
 }
 function renderGraph(){
   if(!state.snapshot||!state.graphReady||state.mode!=='graph')return;
-  $('graph-scope-caption').textContent=(state.graphFocus&&state.block?`Только ветка · ${topic(state.block)?.name||''}`:state.block?'Блок в общем графе':'Обзор памяти')+(state.hideEmpty?' · Пустые ветки скрыты':'');
   $('graph-focus').setAttribute('aria-pressed',String(state.graphFocus));
   $('graph-focus').disabled=!state.block;
   const viewport=$('graph').getBoundingClientRect();if(viewport.width&&viewport.height){
@@ -799,12 +955,12 @@ function renderGraph(){
     const b=n.bounds;
     g.append(svg('rect',{class:'node-surface',x:b.left,y:b.top,width:b.right-b.left,height:b.bottom-b.top,rx:8}));
     if(n.type==='block'){
-      n.lines.forEach((line,i)=>g.append(svg('text',{class:'node-title',x:-82,y:-8+i*17},line)));
+      n.lines.forEach((line,i)=>g.append(svg('text',{class:'node-title',x:-82,y:(n.lines.length>1?-12:-4)+i*16},line)));
       g.append(svg('text',{class:'node-caption',x:-82,y:24},(n.archived?'Архив · ':'')+counted(n.recordCount,['запись','записи','записей'])));
       if(n.expandable)g.append(svg('circle',{class:'node-toggle','data-toggle':n.id,cx:83,cy:21,r:10}),svg('text',{class:'node-toggle-label',x:83,y:21},n.busy?'…':n.expanded?'−':'+'));
     }else if(n.type==='record'){
       g.setAttribute('data-status',n.status||'');
-      g.append(svg('text',{class:'node-kind',x:-94,y:-26},kindNames[n.kind]||n.kind||'Запись'),svg('circle',{class:'node-status',cx:94,cy:-29,r:2.5}));
+      g.append(svg('text',{class:'node-kind',x:-94,y:-26},(kindNames[n.kind]||n.kind||'Запись')+(n.sourceCopies?' · ×'+n.sourceCopies:'')),svg('circle',{class:'node-status',cx:94,cy:-29,r:2.5}));
       n.lines.forEach((line,i)=>g.append(svg('text',{class:'node-title',x:-94,y:-3+i*17},line)));
       g.append(svg('text',{class:'node-date',x:-94,y:33},date(n.recordedAt)));
       g.setAttribute('aria-description',`${kindNames[n.kind]||n.kind} · ${statusNames[n.status]||n.status} · ${date(n.recordedAt)}`);
@@ -820,7 +976,7 @@ function renderGraph(){
       if(e.key==='+'||e.key==='-')e.stopPropagation();
     });scene.append(g);if(focused===n.id)g.focus({preventScroll:true});
   }
-  animateGraph(previous,before,oldNodes,oldLinks);applyTransform();if(state.fitNeeded){state.fitNeeded=false;requestAnimationFrame(()=>focusGraph());}
+  animateGraph(previous,before,oldNodes,oldLinks);applyTransform();if(state.fitNeeded){state.fitNeeded=false;requestAnimationFrame(()=>{fitGraph();fitGraph(true);});}
 }
 let graphMotion=0,cameraMotion=0;
 function animateGraph(previous,before,oldNodes,oldLinks){
@@ -925,7 +1081,7 @@ function renderMinimap(positions=state.positions,nodes=graphNodes,projection=nul
   const bounds=graphBounds(),scene=$('minimap-scene');scene.replaceChildren();$('minimap-wrap').hidden=!$('show-minimap').checked||nodes.length<8;
   if(!bounds&&!projection)return;miniProjection=projection||mapProjection(bounds);const t=miniProjection,byId=new Map(nodes.map(n=>[n.id,n])),path=graphPath();
   for(const n of nodes){const a=positions[n.parent],b=positions[n.id];if(!a||!b)continue;
-    scene.append(svg('path',{class:'minimap-link'+(path.has(n.parent)&&path.has(n.id)?' in-path':''),style:`opacity:${.5*(b.opacity??1)}`,d:`M ${a.x*t.k+t.x} ${a.y*t.k+t.y} L ${b.x*t.k+t.x} ${b.y*t.k+t.y}`}));
+    scene.append(svg('path',{class:'minimap-link'+(path.has(n.parent)&&path.has(n.id)?' in-path':''),opacity:`${.5*(b.opacity??1)}`,d:`M ${a.x*t.k+t.x} ${a.y*t.k+t.y} L ${b.x*t.k+t.x} ${b.y*t.k+t.y}`}));
   }
   for(const n of byId.values()){const p=positions[n.id],dot=svg('circle',{class:'minimap-node'+(path.has(n.id)?' in-path':''),'data-map-id':n.id,cx:p.x*t.k+t.x,cy:p.y*t.k+t.y,r:n.type==='block'?2.2:1.3,fill:n.color,opacity:p.opacity??1});dot.append(svg('title',{},n.title));scene.append(dot);}
   updateMinimapViewport();
@@ -1061,8 +1217,8 @@ $('search-form').onsubmit=e=>{e.preventDefault();void search($('query').value);}
 $('query').addEventListener('input',()=>{if(!$('query').value&&state.query){state.query='';state.searchRequest++;$('search-info').hidden=true;void refresh();}});
 $('block-query').oninput=()=>{state.blockQuery=$('block-query').value.trim();renderTopics();storeLayout();};
 $('clear-block-query').onclick=()=>{state.blockQuery='';$('block-query').value='';renderTopics();storeLayout();$('block-query').focus();};
-$('hide-empty').onchange=()=>{
-  state.hideEmpty=$('hide-empty').checked;const id=activeGraphId();
+$('toggle-catalog').onclick=()=>{
+  state.hideEmpty=!state.hideEmpty;const id=activeGraphId();
   state.layoutAnchor=state.drawPositions[id]?{id,...state.drawPositions[id]}:null;
   renderTopics();renderGraph();storeLayout();
 };
@@ -1111,11 +1267,16 @@ function showStopped(){state.stopped=true;state.source?.close();connected(false)
 $('stop-panel').onclick=async()=>{if(state.draft?.saving){toast('Дождитесь результата сохранения.');return;}$('stop-panel').disabled=true;
   try{await api('api/stop',{});showStopped();}catch(error){$('stop-panel').disabled=false;toast(error.message);}};
 
+function treeHasBranches(snapshot){return (snapshot?.tree||[]).some(node=>(node.children||[]).length>0);}
+// Records are filed into logical blocks, which are not nodes of the block tree.
+// A store full of records can therefore render as an empty graph on first open.
+function preferredMode(){if(!state.snapshot)return state.mode;const count=(state.snapshot.records||[]).length;if(count>0&&!treeHasBranches(state.snapshot))return 'list';return state.mode;}
+
 async function start() {
   try {
     const token=location.hash.slice(1);if(token){history.replaceState(null,'',location.pathname+location.search);await api('auth',{token});}
     await refresh();if(!state.snapshot)throw new Error('Не удалось прочитать память. Откройте панель командой um-memory dashboard.');
-    renderSummary();setMode(state.mode);if(state.mode==='graph'&&state.block)focusGraph();
+    renderSummary();setMode(preferredMode());if(state.mode==='graph'&&state.block)focusGraph();
     if(state.snapshot.read_only){connected(true);return;}
     state.source=new EventSource(`/panel/api/events?since=${encodeURIComponent(state.snapshot.cursor)}`);
     state.source.onopen=()=>{connected(true);banner();};state.source.onerror=()=>{if(state.stopped)return;connected(false);banner('Связь потеряна. Черновик остаётся в редакторе. Если панель была остановлена, откройте её снова: um-memory dashboard.');};

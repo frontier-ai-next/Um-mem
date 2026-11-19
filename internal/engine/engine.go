@@ -33,15 +33,16 @@ type Config struct {
 }
 
 type Engine struct {
-	config    Config
-	indexPath string
-	refreshMu sync.Mutex
-	current   atomic.Pointer[catalogSnapshot]
-	index     *store.Index
-	topology  *catalog.Store
-	writer    *store.Writer
-	projector store.NativeProjector
-	recaller  nativeRecaller
+	config     Config
+	indexPath  string
+	refreshMu  sync.Mutex
+	current    atomic.Pointer[catalogSnapshot]
+	index      *store.Index
+	topology   *catalog.Store
+	writer     *store.Writer
+	projector  store.NativeProjector
+	recaller   nativeRecaller
+	embeddings embedStore
 }
 
 type catalogSnapshot struct {
@@ -410,5 +411,81 @@ func (engine *Engine) Recall(ctx context.Context, plan memory.RecallPlan) (recor
 	if plan.WorkspaceID != engine.config.WorkspaceID || plan.ProfileID != engine.config.ProfileID {
 		return nil, errors.New("recall scope differs from selected engine")
 	}
-	return engine.recaller.Recall(ctx, engine.index, plan)
+	// `um.*` facets address record metadata, not indexed retrieval terms: keep
+	// them out of term matching and apply them as an exact filter afterwards.
+	metaFacets := make(map[string][]string, len(plan.Facets))
+	indexedFacets := make(map[string][]string, len(plan.Facets))
+	for key, values := range plan.Facets {
+		if strings.HasPrefix(key, "um.") {
+			metaFacets[key] = values
+		} else {
+			indexedFacets[key] = values
+		}
+	}
+	plan.Facets = indexedFacets
+	nativeRecall := engine.recaller.Recall
+	dense := engine.config.BackendID == "mnemosyne" && plan.RetrievalMode == "hybrid" &&
+		plan.TemporalMode == "current" && plan.AsOf == "" && plan.KnownAsOf == "" && !plan.HasExactSelectors()
+	if dense {
+		if embedConfigFromEnv().URL == "" {
+			return nil, errors.New("Mnemosyne hybrid retrieval needs a configured embedding endpoint")
+		}
+		if err := plan.Validate(); err != nil {
+			return nil, err
+		}
+		if native, ok := engine.recaller.(mnemosyne.Projector); ok {
+			nativeRecall = native.RecallForDenseRerank
+		}
+	}
+	records, err = nativeRecall(ctx, engine.index, plan)
+	if err != nil {
+		return nil, err
+	}
+	if len(metaFacets) > 0 {
+		records = filterMetadataFacets(records, metaFacets)
+	}
+	if plan.TemporalMode == "current" && plan.AsOf == "" && plan.KnownAsOf == "" && !plan.HasExactSelectors() {
+		limit := plan.Limit
+		if dense && limit == 0 {
+			limit = 10
+		}
+		records = store.FitRecallTokenBudget(engine.hybridRank(ctx, plan.Query, records, limit, dense), plan.MaxTokens)
+	}
+	if withdrawn, werr := engine.WithdrawnIDs(ctx); werr == nil {
+		records = markWithdrawn(records, withdrawn)
+	}
+	return records, nil
+}
+
+func filterMetadataFacets(records []memory.MemoryRecord, facets map[string][]string) []memory.MemoryRecord {
+	kept := make([]memory.MemoryRecord, 0, len(records))
+	for _, record := range records {
+		if matchesMetadataFacets(record, facets) {
+			kept = append(kept, record)
+		}
+	}
+	return kept
+}
+
+func matchesMetadataFacets(record memory.MemoryRecord, facets map[string][]string) bool {
+	for key, values := range facets {
+		field := strings.TrimPrefix(key, "um.")
+		actual := ""
+		if record.Metadata != nil {
+			if raw, found := record.Metadata[field]; found {
+				actual = fmt.Sprint(raw)
+			}
+		}
+		matched := false
+		for _, value := range values {
+			if value == actual {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }

@@ -204,6 +204,13 @@ until the new generation is published.
 
 ## Sessions and projects
 
+Use the bundled `organize-memory-topology` skill during ordinary work and
+when reviewing longer-lived topics. Agents can inspect the tree and create
+index branches or writable leaves with the standard MCP tools. CLI integrations
+can also call `agent-topics --request-file` with a query or a full topic path.
+The same path is reused within a workspace. Go clients can call
+`AgentTopics` and `EnsureAgentTopic` directly.
+
 `workspace_id` and `profile_id` own the persistent semantic catalog. Session,
 task, and subtask IDs are scope and provenance. They do not require visible
 blocks. Several sessions can extend the same tree; several projects can coexist

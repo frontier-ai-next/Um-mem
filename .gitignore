@@ -17,6 +17,10 @@ __pycache__/
 node_modules/
 dist/
 build/
+bin/
+.gocache/
+.gomodcache/
+.gopath/
 runs/
 unused/
 .codex*
@@ -30,3 +34,6 @@ site/
 public/
 
 npm/*.tgz
+integrations/dsh/um-mem.config.json
+/integrations/dsh/skills/organize-memory-topology/
+/npm/skills/organize-memory-topology/

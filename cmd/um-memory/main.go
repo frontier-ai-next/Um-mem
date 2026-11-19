@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -59,7 +61,14 @@ func readJSONFile(path string, target any) error {
 		return err
 	}
 	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 4<<20))
+	// Windows tooling (Windows PowerShell 5 `Set-Content -Encoding utf8`, some
+	// editors) prepends a UTF-8 BOM, which encoding/json rejects. Strip it so a
+	// hand-written request file is accepted on the platform the CLI ships for.
+	reader := bufio.NewReader(file)
+	if head, peekErr := reader.Peek(3); peekErr == nil && bytes.Equal(head, []byte{0xEF, 0xBB, 0xBF}) {
+		_, _ = reader.Discard(3)
+	}
+	decoder := json.NewDecoder(io.LimitReader(reader, 4<<20))
 	decoder.DisallowUnknownFields()
 	decoder.UseNumber()
 	if err := decoder.Decode(target); err != nil {
@@ -70,6 +79,23 @@ func readJSONFile(path string, target any) error {
 		return errors.New("JSON file must contain exactly one value")
 	}
 	return nil
+}
+
+// nameRevisionOutcome gives a mutation receipt the two names a host adapter
+// needs: `record_id` is the record as it exists now, `revision_id` is the
+// revision that operation wrote. The engine reports those under `new_id` /
+// `new_revision` for amend and under `block_id` / `revision_id` for forget,
+// which reads as "the record changed its id" to any caller.
+func nameRevisionOutcome(payload map[string]any, memoryID string) map[string]any {
+	if revision, ok := payload["new_revision"].(string); ok && revision != "" {
+		payload["revision_id"] = revision
+	}
+	if current, ok := payload["new_id"].(string); ok && current != "" {
+		payload["record_id"] = current
+	} else if trimmed := strings.TrimSpace(memoryID); trimmed != "" {
+		payload["record_id"] = trimmed
+	}
+	return payload
 }
 
 type scopeFlag struct{ values []string }
@@ -86,13 +112,54 @@ func (flag *scopeFlag) Set(value string) error {
 	return nil
 }
 
+const usageText = `um-memory — локальный рантайм памяти для агентов.
+
+Использование:
+  um-memory <command> --repo-root <store> --workspace <id> [--profile default] --backend <backend> [flags]
+
+Чтение:
+  health                     состояние бэкенда и проекции
+  catalog                    каталог логических блоков
+  block-map --depth N        дерево блоков
+  memory-map --output-path   статичная HTML-карта
+  recent --limit N --scope workspace|user_global --scope-id <id>
+  list-records --scope <s> --scope-id <id> [--limit N] [--cursor <c>]
+  read-record --record-id <id>
+  recall --plan-file <json>
+  explain-recall --request-file <json>
+  neighbors --record-id <id> [--depth 1..3] [--edge-types a,b] [--neighbor-limit N]
+  export-graph               записи и рёбра целиком
+
+Запись:
+  remember-candidate --request-file <json>
+  amend | forget | deprecate | rollback --request-file <json>
+  add-edge --request-file <json>          src_id, dst_id, edge_type, evidence_refs
+  promote | consolidate-observations --request-file <json>
+
+Обслуживание:
+  reconcile [--dry-run|--apply]           повтор нативных проекций
+  dashboard [--no-browser|--stop]         локальная панель
+  agent-topics --request-file FILE       поиск или создание смысловой ветки
+  install-mcp --host claude|codex|hermes  регистрация MCP-сервера
+  mcp-status --host <h>
+  profile-report | operator-report | observe-runtime-cost | rebuild-indexes
+
+Все команды печатают JSON в stdout. Общие флаги: --repo-root, --workspace,
+--profile, --backend; для user_global записей нужен --user-id (в запросе поле user_id).
+`
+
 func run(ctx context.Context, args []string, output io.Writer) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+		fmt.Fprint(output, usageText)
+		return nil
+	}
 	if len(args) == 0 {
-		return errors.New("command required: dashboard, install-mcp, mcp-status, catalog, health, profile-report, rebuild-indexes, block-map, memory-map, obsidian-export, expand-block, navigation-envelope, prospective-create, prospective-get, prospective-transition, prospective-apply, prospective-candidates, prospective-intervention, prospective-telemetry, record-decision, record-usage, decision-trace, record-outcome-credit, outcome-credits, operator-report, observe-runtime-cost, explain-recall, deep-read, erase, pending-topology-evolutions, abort-topology-evolution, resume-topology-evolution, split-block, merge-blocks, observe-maintenance, add-edge, export-graph, create-block, amend-block, convert-block-to-index, protect-block, repair-protected-block-parent, archive-block, expire-due-blocks, revive-block, archive-session-block, revive-session-block, set-session-block-expiry, move-block, delete-block, forget, deprecate, rollback, amend, verification-subject, promote, consolidate-observations, commit-working-checkpoint, remember-candidate, operation-status, projection-barrier, put-root, put-successor, read-record, recall, recent, list-records or reconcile")
+		return errors.New("command required: run `um-memory --help` for the command list")
 	}
 	command := args[0]
 	switch command {
-	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "reconcile":
+	case "dsh-focus", "agent-topics":
+	case "dashboard", "install-mcp", "mcp-status", "catalog", "health", "profile-report", "rebuild-indexes", "block-map", "memory-map", "obsidian-export", "export-obsidian", "expand-block", "navigation-envelope", "prospective-create", "prospective-get", "prospective-transition", "prospective-apply", "prospective-candidates", "prospective-intervention", "prospective-telemetry", "record-decision", "record-usage", "decision-trace", "record-outcome-credit", "outcome-credits", "operator-report", "observe-runtime-cost", "explain-recall", "deep-read", "erase", "pending-topology-evolutions", "abort-topology-evolution", "resume-topology-evolution", "split-block", "merge-blocks", "observe-maintenance", "add-edge", "export-graph", "create-block", "amend-block", "convert-block-to-index", "protect-block", "repair-protected-block-parent", "archive-block", "expire-due-blocks", "revive-block", "archive-session-block", "revive-session-block", "set-session-block-expiry", "move-block", "delete-block", "forget", "deprecate", "rollback", "amend", "verification-subject", "promote", "consolidate-observations", "commit-working-checkpoint", "remember-candidate", "operation-status", "projection-barrier", "put-root", "put-successor", "read-record", "recall", "recent", "list-records", "neighbors", "auto-link", "memory-stats", "stable-id", "promotion-candidates", "contradictions", "consolidation", "export-jsonl", "import-jsonl", "approve", "graph-report", "weave-blocks", "purge", "reconcile":
 	default:
 		return fmt.Errorf("unsupported command %q", command)
 	}
@@ -133,6 +200,23 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	recentBlock := flags.String("logical-block-id", "", "recent logical block filter")
 	includeCandidates := flags.Bool("include-candidates", true, "include candidate records in recent results")
 	pageCursor := flags.String("cursor", "", "record-page cursor")
+	edgeTypes := flags.String("edge-types", "", "comma-separated edge types for neighbors")
+	neighborLimit := flags.Int("neighbor-limit", 12, "neighbors result limit")
+	autoLinkOn := flags.Bool("auto-link", true, "attach a related_to edge after a candidate write")
+	linkThreshold := flags.Float64("link-threshold", 0.12, "minimum lexical similarity for auto-link")
+	conflictThreshold := flags.Float64("conflict-threshold", 0.55, "minimum similarity for a contradiction pair")
+	confirmConsolidation := flags.Bool("confirm-consolidation", false, "required together with --apply: retirement is irreversible from the caller side")
+	currentOnly := flags.Bool("current-only", false, "export only records that are still in force")
+	graphHTML := flags.String("html", "", "write a standalone web view of the graph")
+	purgeIDs := flags.String("purge-ids", "", "comma separated record or revision ids to purge")
+	purgeKinds := flags.String("purge-kinds", "", "comma separated kinds to purge, e.g. episode")
+	purgeBlocks := flags.String("purge-blocks", "", "comma separated blocks to purge")
+	purgeConfirm := flags.Bool("purge-confirm", false, "required together with --apply")
+	purgeShred := flags.Bool("purge-shred", false, "delete the old store directory after a successful swap")
+	approverFlag := flags.String("approver", "", "operator identity for an approval")
+	approvalNote := flags.String("note", "", "why the record is approved")
+	facets := &scopeFlag{}
+	flags.Var(facets, "facet", "recall facet filter as key=value, repeatable")
 	includeRetracted := flags.Bool("include-retracted", false, "include noncurrent record revisions in list-records")
 	mapDepth := flags.Int("depth", 1, "block-map tree depth")
 	mapIncludeMeta := flags.Bool("include-meta", false, "include protected catalog taxonomy in block-map")
@@ -273,7 +357,40 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return err
 	}
 	defer selected.Close()
+	if command == "dsh-focus" {
+		var request dshFocusRequest
+		if err := readJSONFile(*requestFile, &request); err != nil {
+			return err
+		}
+		result, err := dshFocus(ctx, selected, request)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(result)
+	}
 	switch command {
+	case "agent-topics":
+		var request struct {
+			Query string   `json:"query"`
+			Limit int      `json:"limit"`
+			Path  []string `json:"path"`
+			About string   `json:"about"`
+		}
+		if err := readJSONFile(*requestFile, &request); err != nil {
+			return err
+		}
+		if request.Path == nil {
+			topics, err := selected.AgentTopics(request.Query, request.Limit)
+			if err != nil {
+				return err
+			}
+			return encoder.Encode(topics)
+		}
+		topic, err := selected.EnsureAgentTopic(ctx, request.Path, request.About)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(topic)
 	case "observe-runtime-cost":
 		var request ummem.RuntimeCostObservation
 		if err := readJSONFile(*requestFile, &request); err != nil {
@@ -713,7 +830,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return err
 		}
 		payload["backend"] = *backend
-		return encoder.Encode(payload)
+		return encoder.Encode(nameRevisionOutcome(payload, request.MemoryID))
 	case "deprecate":
 		var request engine.DeprecateRequest
 		if err := readJSONFile(*requestFile, &request); err != nil {
@@ -724,7 +841,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return err
 		}
 		payload["backend"] = *backend
-		return encoder.Encode(payload)
+		return encoder.Encode(nameRevisionOutcome(payload, request.MemoryID))
 	case "rollback":
 		var request engine.RollbackRequest
 		if err := readJSONFile(*requestFile, &request); err != nil {
@@ -746,7 +863,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return err
 		}
 		payload["backend"] = *backend
-		return encoder.Encode(payload)
+		return encoder.Encode(nameRevisionOutcome(payload, request.MemoryID))
 	case "verification-subject":
 		var request engine.VerificationSubjectRequest
 		if err := readJSONFile(*requestFile, &request); err != nil {
@@ -812,7 +929,28 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if *autoLinkOn && result.Saved && result.RecordID != "" {
+			// Best-effort: a missing neighbour must never fail a durable write.
+			if link, linkErr := selected.AutoLink(ctx, result.RecordID, *linkThreshold); linkErr == nil {
+				result.AutoLink = link
+			}
+		}
 		return encoder.Encode(result)
+	case "auto-link":
+		if strings.TrimSpace(*recordID) == "" {
+			return errors.New("--record-id is required for auto-link")
+		}
+		payload, err := selected.AutoLink(ctx, *recordID, *linkThreshold)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "memory-stats":
+		payload, err := selected.Stats(ctx)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
 	case "put-root":
 		if strings.TrimSpace(*blockID) == "" {
 			return errors.New("--block is required for put-root")
@@ -850,20 +988,181 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 			return errors.New("--record-id is required for read-record")
 		}
 		record, err := selected.ReadStored(ctx, *recordID)
+		// Reading by stable (root) id should land on the live revision; reading by
+		// an explicit revision id stays exact, so audit reads keep working.
+		if resolved, resolveErr := selected.StableResolve(ctx, *recordID); resolveErr == nil {
+			stable, _ := resolved["stable_id"].(string)
+			current, _ := resolved["record_id"].(string)
+			if stable != "" && stable == *recordID && current != "" && current != *recordID {
+				if latest, latestErr := selected.ReadStored(ctx, current); latestErr == nil {
+					record, err = latest, nil
+				}
+			}
+		}
 		if err != nil {
 			return err
 		}
-		return encoder.Encode(record)
+		if record == nil {
+			return errors.New("record not found: " + *recordID)
+		}
+		// `block_id` on a stored record is the record identity, which reads as
+		// the logical block to every caller. Publish both names explicitly so a
+		// host does not have to know the internal naming.
+		raw, err := json.Marshal(record)
+		if err != nil {
+			return err
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return err
+		}
+		payload["record_id"] = record.BlockID
+		if record.BlockMembership != nil {
+			payload["logical_block_id"] = record.BlockMembership.PrimaryBlockID
+		} else {
+			payload["logical_block_id"] = ""
+		}
+		if resolved, resolveErr := selected.StableResolve(ctx, record.BlockID); resolveErr == nil {
+			payload["stable_id"] = resolved["stable_id"]
+			payload["revisions"] = resolved["revisions"]
+		}
+		if withdrawn, werr := selected.WithdrawnIDs(ctx); werr == nil {
+			payload["withdrawn"] = withdrawn[record.BlockID]
+		}
+		return encoder.Encode(payload)
+	case "stable-id":
+		if strings.TrimSpace(*recordID) == "" {
+			return errors.New("--record-id is required for stable-id")
+		}
+		payload, err := selected.StableResolve(ctx, *recordID)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "neighbors":
+		if strings.TrimSpace(*recordID) == "" {
+			return errors.New("--record-id is required for neighbors")
+		}
+		types := make([]string, 0, 4)
+		for _, value := range strings.Split(*edgeTypes, ",") {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				types = append(types, trimmed)
+			}
+		}
+		payload, err := selected.Neighbors(ctx, engine.NeighborRequest{
+			RecordID: *recordID, Depth: *mapDepth, EdgeTypes: types, Limit: *neighborLimit,
+		})
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
 	case "recall":
 		var plan memory.RecallPlan
 		if err := readJSONFile(*planFile, &plan); err != nil {
 			return err
+		}
+		for _, item := range facets.values {
+			key, value, ok := strings.Cut(item, "=")
+			if !ok || strings.TrimSpace(key) == "" {
+				return errors.New("--facet must be key=value")
+			}
+			if plan.Facets == nil {
+				plan.Facets = map[string][]string{}
+			}
+			plan.Facets[strings.TrimSpace(key)] = append(plan.Facets[strings.TrimSpace(key)], strings.TrimSpace(value))
 		}
 		records, err := selected.Recall(ctx, plan)
 		if err != nil {
 			return err
 		}
 		return encoder.Encode(records)
+	case "promotion-candidates":
+		payload, err := selected.PromotionCandidates(ctx, *neighborLimit)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "contradictions":
+		payload, err := selected.Contradictions(ctx, *conflictThreshold, *neighborLimit)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "weave-blocks":
+		payload, err := selected.WeaveBlocks(ctx, *conflictThreshold, *apply, *neighborLimit)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "purge":
+		if len(strings.TrimSpace(*purgeIDs)) == 0 && len(strings.TrimSpace(*purgeKinds)) == 0 && len(strings.TrimSpace(*purgeBlocks)) == 0 {
+			return errors.New("purge needs --record-id, --kind or --block")
+		}
+		request := engine.PurgeRequest{Apply: *apply, Confirm: *purgeConfirm, Shred: *purgeShred}
+		for _, part := range strings.Split(*purgeIDs, ",") {
+			if value := strings.TrimSpace(part); value != "" {
+				request.RecordIDs = append(request.RecordIDs, value)
+			}
+		}
+		for _, part := range strings.Split(*purgeKinds, ",") {
+			if value := strings.TrimSpace(part); value != "" {
+				request.Kinds = append(request.Kinds, value)
+			}
+		}
+		for _, part := range strings.Split(*purgeBlocks, ",") {
+			if value := strings.TrimSpace(part); value != "" {
+				request.Blocks = append(request.Blocks, value)
+			}
+		}
+		payload, err := selected.Purge(ctx, request)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "graph-report":
+		if strings.TrimSpace(*graphHTML) != "" {
+			payload, err := selected.GraphHTML(ctx, *graphHTML)
+			if err != nil {
+				return err
+			}
+			return encoder.Encode(payload)
+		}
+		payload, err := selected.GraphReport(ctx)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "import-jsonl":
+		payload, err := selected.ImportJSONL(ctx, *mapOutputPath)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "approve":
+		if strings.TrimSpace(*recordID) == "" {
+			return errors.New("--record-id is required for approve")
+		}
+		approver := strings.TrimSpace(*approverFlag)
+		payload, err := selected.Approve(ctx, *recordID, approver, *approvalNote)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "export-jsonl":
+		payload, err := selected.ExportJSONL(ctx, *mapOutputPath, *currentOnly)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
+	case "consolidation":
+		if *apply && !*confirmConsolidation {
+			return errors.New("consolidation --apply requires --confirm-consolidation: review the dry-run plan first")
+		}
+		payload, err := selected.Consolidation(ctx, *conflictThreshold, *apply && *confirmConsolidation, *neighborLimit)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(payload)
 	case "recent":
 		records, err := selected.Recent(ctx, engine.RecentRequest{Limit: *recentLimit,
 			Since: *recentSince, Scope: recentScope.String(), ScopeID: *recentScopeID,

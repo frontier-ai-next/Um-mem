@@ -36,6 +36,7 @@ type ForgetRequest = engine.ForgetRequest
 type DeprecateRequest = engine.DeprecateRequest
 type RollbackRequest = engine.RollbackRequest
 type CreateBlockRequest = engine.CreateBlockRequest
+type AgentTopic = engine.AgentTopic
 type AmendBlockRequest = engine.AmendBlockRequest
 type MoveBlockRequest = engine.MoveBlockRequest
 type BlockTransitionRequest = engine.BlockTransitionRequest

@@ -208,7 +208,7 @@ func (engine *Engine) blockViews(ctx context.Context, navigation catalog.Navigat
 				"parent_id": block.ParentID, "child_ids": childIDs, "related_block_ids": []string{}},
 			"record_count": recordCount, "canonical_record_count": recordCount,
 			"latest_title": "", "exact_dimensions": dimensions, "freshness": freshness,
-			"index_only": block.IndexOnly, "agent_writable": block.AgentWritable,
+			"index_only": block.IndexOnly, "block_type": block.BlockType, "agent_writable": block.AgentWritable,
 			"writable": writable, "metadata": block.Metadata,
 			"workspace_id": engine.config.WorkspaceID, "profile_id": engine.config.ProfileID,
 			"revision": revision, "status": status, "protected": protected,

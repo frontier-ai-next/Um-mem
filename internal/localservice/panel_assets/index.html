@@ -29,7 +29,7 @@
       </div>
       <button id="all-topics" class="overview-button" data-icon="map">Вся память</button>
       <div class="topic-heading"><span>Блоки</span><span id="tree-count"></span></div>
-      <div class="tree-filters"><div class="block-search"><input id="block-query" type="search" aria-label="Поиск блоков" placeholder="Найти блок…" autocomplete="off"><button id="clear-block-query" class="icon-button" aria-label="Очистить поиск блоков" hidden>✕</button></div><label class="hide-empty-option"><input id="hide-empty" type="checkbox"> Скрыть пустые ветки</label><span id="block-filter-note" role="status" hidden></span></div>
+      <div class="tree-filters"><div class="block-search"><input id="block-query" type="search" aria-label="Поиск блоков" placeholder="Найти блок…" autocomplete="off"><button id="clear-block-query" class="icon-button" aria-label="Очистить поиск блоков" hidden>✕</button></div><button id="toggle-catalog" type="button" class="text-button catalog-toggle" aria-controls="topics" aria-pressed="false" hidden>Показать полный каталог</button><span id="block-filter-note" role="status" hidden></span></div>
       <div id="topics" class="topics" aria-label="Блоки памяти"></div>
     </aside>
     <main>
@@ -59,8 +59,8 @@
         <button id="load-more" class="secondary load-more" hidden>Ещё записи</button>
       </section>
       <section id="activity-view" class="scroll-view" hidden><div id="activity" aria-label="События с момента открытия панели"></div></section>
-      <section id="context-view" class="scroll-view" hidden><div class="context-intro"><h2 title="Сведения, переданные агентам. Передача не подтверждает использование в ответе.">Передано агентам</h2></div><div id="sessions" class="session-list"></div><div id="context-events"></div></section>
-      <footer><div class="stats"><span><b id="stat-topics">—</b> блоков</span><span><b id="stat-records">—</b> записей</span></div><button id="help-button" class="text-button" aria-expanded="false" aria-controls="keyboard-help" data-icon="keyboard" aria-label="Подсказки по управлению"></button></footer>
+      <section id="context-view" class="scroll-view" hidden><div class="context-intro"><h2>Контекст по ходам</h2></div><div id="harness-turns" aria-label="Ходы Harness"></div><details class="service-context"><summary>События сервиса</summary><div id="sessions" class="session-list"></div><div id="context-events"></div></details></section>
+      <footer><div class="stats"><span><b id="stat-topics">—</b></span><span><b id="stat-records">—</b> записей</span></div><button id="help-button" class="text-button" aria-expanded="false" aria-controls="keyboard-help" data-icon="keyboard" aria-label="Подсказки по управлению"></button></footer>
     </main>
     <aside id="detail" class="detail" aria-label="Сведения памяти" hidden><div class="detail-head"><span id="detail-label">В ПАМЯТИ</span><button id="close-detail" class="icon-button" aria-label="Закрыть сведения" title="Закрыть" data-icon="close"></button></div><div id="detail-content"></div></aside>
   </div>

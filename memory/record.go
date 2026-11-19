@@ -259,6 +259,17 @@ func (ref EvidenceRef) Validate() error {
 	return nil
 }
 
+// IsHarnessToolReceipt identifies a result receipt captured by the host. It
+// establishes provenance, without verifying arbitrary claims derived from it.
+func (ref EvidenceRef) IsHarnessToolReceipt() bool {
+	if ref.RefType != "tool_result" || ref.ProducedBy != "harness" || ref.Hash == nil ||
+		len(*ref.Hash) != sha256.Size*2 || ref.Validate() != nil {
+		return false
+	}
+	_, err := hex.DecodeString(*ref.Hash)
+	return err == nil
+}
+
 var reservedMetadata = func() map[string]struct{} {
 	keys := strings.Fields(`authority authority_class backend backend_id backend_reference backend_revision
 		block_id canonical_id canonical_key child_claims commit_revision content_mode delivery_policy

@@ -49,6 +49,23 @@ type NativeClient struct {
 	mu          sync.Mutex
 }
 
+// The MemPalace projector supplies and queries vectors explicitly. Opening a
+// collection must not initialize Chroma's separate default embedding model.
+type suppliedVectors struct{}
+
+func (suppliedVectors) EmbedDocuments(context.Context, []string) ([]embeddings.Embedding, error) {
+	return nil, errors.New("MemPalace requires supplied document embeddings")
+}
+func (suppliedVectors) EmbedQuery(context.Context, string) (embeddings.Embedding, error) {
+	return nil, errors.New("MemPalace requires a supplied query embedding")
+}
+func (suppliedVectors) Name() string                                  { return "um-mem-supplied-vectors" }
+func (suppliedVectors) GetConfig() embeddings.EmbeddingFunctionConfig { return nil }
+func (suppliedVectors) DefaultSpace() embeddings.DistanceMetric       { return embeddings.COSINE }
+func (suppliedVectors) SupportedSpaces() []embeddings.DistanceMetric {
+	return []embeddings.DistanceMetric{embeddings.COSINE}
+}
+
 func OpenNativeClient(repoRoot, workspaceID string) (*NativeClient, error) {
 	if repoRoot == "" || workspaceID == "" {
 		return nil, errors.New("MemPalace native client requires repository and workspace")
@@ -94,9 +111,10 @@ func (c *NativeClient) collection(ctx context.Context, record memory.MemoryRecor
 		return nil, err
 	}
 	if create {
-		return c.client.GetOrCreateCollection(ctx, name, chroma.WithHNSWSpaceCreate(embeddings.COSINE))
+		return c.client.GetOrCreateCollection(ctx, name, chroma.WithHNSWSpaceCreate(embeddings.COSINE),
+			chroma.WithEmbeddingFunctionCreate(suppliedVectors{}), chroma.WithDisableEFConfigStorage())
 	}
-	return c.client.GetCollection(ctx, name)
+	return c.client.GetCollection(ctx, name, chroma.WithEmbeddingFunctionGet(suppliedVectors{}))
 }
 
 func (c *NativeClient) Get(ctx context.Context, record memory.MemoryRecord, ids []string) ([]NativeRow, error) {
